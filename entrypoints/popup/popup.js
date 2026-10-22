@@ -1,5 +1,6 @@
 // 引入频道关联管理工具
 import { channelAssociation, ChannelAssociationManager } from '../../utils/channelAssociation.js';
+import { parseBilibiliSource } from '../../utils/bilibili-url.js';
 
 // 获取当前标签页信息
 async function getCurrentTab() {
@@ -56,27 +57,51 @@ function buildYouTubeMatchInfo(video, source = 'manual-select') {
     };
 }
 
-// 将AV ID转换为BV ID
-function avToBv(avid) {
-    const table = 'fZodR9XQDSUm21yCkr6zBqiveYah8bt4xsWpHnJE7jL5VG3guMTKNPAwcF';
-    const s = [11, 10, 3, 8, 4, 6];
-    const xor = 177451812;
-    const add = 8728348608n;
-    let x = (BigInt(avid) ^ BigInt(xor)) + add;
-    const r = Array.from('BV1  4 1 7  ');
-    for (let i = 0; i < 6; i++) {
-        r[s[i]] = table[Number((x / 58n ** BigInt(i)) % 58n)];
+// ss 链接指向整季，需要明确选择剧集，避免将错误的弹幕移植到视频。
+async function resolveManualBilibiliSource(inputId, status) {
+    const input = document.getElementById(inputId);
+    const source = parseBilibiliSource(input.value.trim());
+    if (!source) throw new Error('无效的B站链接（支持 BV、av、ep、ss）');
+    const selectId = inputId + '-episode-select';
+    const oldSelect = document.getElementById(selectId);
+    // 链接发生变化时丢弃先前的剧集选择，避免误用上一次的 ep ID。
+    if (!input.dataset.episodeSelectBound) {
+        input.dataset.episodeSelectBound = 'true';
+        input.addEventListener('input', () => document.getElementById(selectId)?.remove());
     }
-    return r.join('');
-}
-
-// 解析B站视频ID
-function parseBilibiliUrl(url) {
-    const bvMatch = url.match(/bilibili\.com\/video\/(BV\w+)/);
-    if (bvMatch) return bvMatch[1];
-    const avMatch = url.match(/bilibili\.com\/video\/av(\d+)/i);
-    if (avMatch) return avToBv(avMatch[1]);
-    return null;
+    if (source.seasonId) {
+        if (!oldSelect || oldSelect.dataset.seasonId !== String(source.seasonId)) {
+            oldSelect?.remove();
+            const requestedUrl = input.value.trim();
+            const result = await browser.runtime.sendMessage({
+                type: 'getBangumiEpisodes',
+                seasonId: source.seasonId
+            });
+            if (input.value.trim() !== requestedUrl) return null;
+            if (!result?.success) throw new Error(result?.error || '无法获取番剧集数');
+            if (!result.episodes?.length) throw new Error('此番剧未返回可用剧集');
+            if (result.episodes.length === 1) return { episodeId: result.episodes[0].id };
+            const selector = document.createElement('select');
+            selector.id = selectId;
+            selector.dataset.seasonId = String(source.seasonId);
+            selector.style.width = '100%';
+            selector.style.marginTop = '8px';
+            selector.appendChild(new Option('请选择要移植弹幕的剧集', ''));
+            for (const ep of result.episodes) {
+                selector.appendChild(new Option(ep.label + (ep.badge ? '（' + ep.badge + '）' : ''), ep.id));
+            }
+            input.insertAdjacentElement('afterend', selector);
+            status('已找到《' + result.title + '》，请选择剧集后再次点击匹配', 'success');
+            return null;
+        }
+        if (!oldSelect.value) {
+            status('请先选择具体剧集', 'error');
+            return null;
+        }
+        return { episodeId: Number(oldSelect.value) };
+    }
+    oldSelect?.remove();
+    return source;
 }
 
 // 获取YouTube视频ID
@@ -595,11 +620,14 @@ async function downloadDanmaku() {
         return;
     }
 
-    const bvid = parseBilibiliUrl(url);
-    if (!bvid) {
-        showStatus('无效的B站视频链接', 'error');
+    let source;
+    try {
+        source = await resolveManualBilibiliSource('bilibili-url', showStatus);
+    } catch (error) {
+        showStatus(error.message, 'error');
         return;
     }
+    if (!source) return;
 
     const tab = await getCurrentTab();
     if (!tab || !tab.url.includes('youtube.com/watch')) {
@@ -635,7 +663,7 @@ async function downloadDanmaku() {
         // 发送消息给background script下载弹幕
         const response = await browser.runtime.sendMessage({
             type: 'downloadDanmaku',
-            bvid: bvid,
+            ...source,
             youtubeVideoId: youtubeVideoId,
             youtubeVideoDuration: youtubeVideoDuration,
             matchInfo: {
@@ -1753,11 +1781,23 @@ async function downloadBangumiDanmakuFromUI(title, episodeNumber, youtubeVideoId
         updateButton.disabled = true;
         updateButton.textContent = '更新中...';
 
+        const tab = await getCurrentTab();
+        let youtubeVideoDuration = null;
+        if (tab?.url?.includes('youtube.com/watch')) {
+            try {
+                const video = await browser.tabs.sendMessage(tab.id, { type: 'getVideoDuration' });
+                youtubeVideoDuration = video?.duration || null;
+            } catch (error) {
+                console.log('获取 YouTube 视频时长失败:', error);
+            }
+        }
+
         const response = await browser.runtime.sendMessage({
             type: 'downloadBangumiDanmaku',
             title: title,
             episodeNumber: episodeNumber,
-            youtubeVideoId: youtubeVideoId
+            youtubeVideoId: youtubeVideoId,
+            youtubeVideoDuration
         });
 
         if (response.success) {
@@ -1767,7 +1807,6 @@ async function downloadBangumiDanmakuFromUI(title, episodeNumber, youtubeVideoId
             await checkCurrentPageDanmaku();
 
             // 通知content script加载弹幕
-            const tab = await getCurrentTab();
             if (tab && tab.url.includes('youtube.com')) {
                 browser.tabs.sendMessage(tab.id, {
                     type: 'loadDanmaku',
@@ -2429,11 +2468,14 @@ async function downloadQuarkDanmaku() {
         return;
     }
 
-    const bvid = parseBilibiliUrl(url);
-    if (!bvid) {
-        showQuarkStatus('无效的B站视频链接', 'error');
+    let source;
+    try {
+        source = await resolveManualBilibiliSource('quark-bilibili-url', showQuarkStatus);
+    } catch (error) {
+        showQuarkStatus(error.message, 'error');
         return;
     }
+    if (!source) return;
 
     const tab = await getCurrentTab();
     if (!tab || !tab.url.includes('pan.quark.cn')) {
@@ -2468,7 +2510,7 @@ async function downloadQuarkDanmaku() {
         // 下载弹幕
         const response = await browser.runtime.sendMessage({
             type: 'downloadDanmaku',
-            bvid: bvid,
+            ...source,
             youtubeVideoId: `quark_${quarkVideoId}`, // 使用 quark_ 前缀
             youtubeVideoDuration: videoDuration,
             matchInfo: {

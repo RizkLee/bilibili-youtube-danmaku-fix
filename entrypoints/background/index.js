@@ -1,7 +1,8 @@
 // 原background.js
 
 // 导入番剧处理模块
-import { searchBilibiliBangumi, findEpisodeByNumber, getBangumiEpisodeDetail } from './bangumi.js';
+import { searchBilibiliBangumi, getBangumiEpisodeDetail, getBangumiSeasonEpisodes } from './bangumi.js';
+import { downloadDanmakuSegments } from '../../utils/danmaku-segments.js';
 // 引入protobuf解析器和OpenCC库
 import '../../lib/protobuf-parser.js';
 import '../../lib/opencc.min.js';
@@ -505,6 +506,18 @@ export default defineBackground(() => {
         }
 
         const buffer = await response.arrayBuffer();
+        const contentType = response.headers.get('content-type') || '';
+        const firstByte = new Uint8Array(buffer)[0];
+        if (contentType.includes('json') || contentType.includes('text') ||
+            firstByte === 123 || firstByte === 60) {
+            const body = new TextDecoder().decode(buffer);
+            let message = body.slice(0, 120);
+            try {
+                const error = JSON.parse(body);
+                message = `${error.code ?? 'unknown'}: ${error.message || error.msg || '接口拒绝访问'}`;
+            } catch {}
+            throw new Error(`弹幕接口未返回 Protobuf 数据：${message}`);
+        }
         return parseDanmakuData(buffer);
     }
 
@@ -748,33 +761,22 @@ export default defineBackground(() => {
     }
 
     // 下载所有弹幕
-    async function downloadAllDanmaku(bvid, youtubeVideoDuration) {
+    async function downloadAllDanmaku(source, youtubeVideoDuration) {
         try {
-            // 1. 获取WBI Keys
             const wbiKeys = await getWbiKeys();
-
-            // 2. 获取视频信息
-            const { cid, duration, aid, title, pic, author } = await getVideoInfo(bvid);
-
-            // 3. 计算分段数（每段6分钟）
-            const segmentCount = Math.ceil(duration / 360);
-
-            // 4. 获取所有分段的弹幕
-            const allDanmakus = [];
-            for (let i = 1; i <= segmentCount; i++) {
-                try {
-                    const danmakus = await getSegmentDanmaku(cid, aid, i, wbiKeys);
-                    console.log(`第${i}段弹幕获取成功: ${danmakus.length}条`);
-                    allDanmakus.push(...danmakus);
-
-                    // 延迟避免请求过快
-                    if (i < segmentCount) {
-                        await new Promise((resolve) => setTimeout(resolve, 300));
-                    }
-                } catch (error) {
-                    console.error(`获取第${i}段弹幕失败:`, error);
-                }
+            const info = typeof source === 'string' ? await getVideoInfo(source) : source;
+            const { cid, duration, aid, title, pic, author } = info;
+            const bvid = typeof source === 'string' ? source : info.bvid;
+            if (!Number.isSafeInteger(Number(cid)) || Number(cid) <= 0 ||
+                !Number.isSafeInteger(Number(aid)) || Number(aid) <= 0 ||
+                !Number.isFinite(Number(duration)) || Number(duration) <= 0) {
+                throw new Error('视频缺少有效 CID、AID 或时长');
             }
+            const segmentCount = Math.ceil(duration / 360);
+            const allDanmakus = await downloadDanmakuSegments(
+                segmentCount,
+                (index) => getSegmentDanmaku(cid, aid, index, wbiKeys)
+            );
 
             // 5. 格式化弹幕数据，增加安全检查
             console.log(`开始处理 ${allDanmakus.length} 条原始弹幕数据`);
@@ -811,11 +813,9 @@ export default defineBackground(() => {
             formattedDanmakus.sort((a, b) => a.time - b.time);
 
             // 移除广告片段弹幕
-            const processedDanmakus = await removeAdSegments(
-                formattedDanmakus,
-                bvid,
-                youtubeVideoDuration
-            );
+            const processedDanmakus = info.episodeId
+                ? formattedDanmakus
+                : await removeAdSegments(formattedDanmakus, bvid, youtubeVideoDuration);
 
             // 统计weight分布（用于调试）
             // const weightStats = {};
@@ -830,7 +830,9 @@ export default defineBackground(() => {
                 title: title,
                 pic: pic,
                 author: author,
-                duration: duration
+                duration: duration,
+                bvid,
+                bilibili_url: info.bilibili_url || `https://www.bilibili.com/video/${bvid}`
             };
         } catch (error) {
             throw error;
@@ -1614,14 +1616,18 @@ export default defineBackground(() => {
     // 监听来自popup的消息
     browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.type === 'downloadDanmaku') {
-            downloadAllDanmaku(request.bvid, request.youtubeVideoDuration)
+            Promise.resolve()
+                .then(async () => downloadAllDanmaku(
+                    request.episodeId ? await getBangumiEpisodeDetail(request.episodeId) : request.bvid,
+                    request.youtubeVideoDuration
+                ))
                 .then(async (data) => {
                     const matchInfo = request.matchInfo || {};
                     // 保存弹幕数据
                     const storageData = {
                         [request.youtubeVideoId]: {
-                            bvid: request.bvid,
-                            bilibili_url: `https://www.bilibili.com/video/${request.bvid}`,
+                            bvid: data.bvid || request.bvid || '',
+                            bilibili_url: data.bilibili_url,
                             bilibili_title: data.title,
                             bilibili_pic: matchInfo.pic || data.pic || '',
                             bilibili_author: matchInfo.author || data.author || '',
@@ -1781,20 +1787,24 @@ export default defineBackground(() => {
                 });
 
             return true; // 保持消息通道开启
+        } else if (request.type === 'getBangumiEpisodes') {
+            getBangumiSeasonEpisodes(request.seasonId)
+                .then((result) => sendResponse({ success: true, ...result }))
+                .catch((error) => sendResponse({ success: false, error: error.message }));
+            return true;
         } else if (request.type === 'downloadBangumiDanmaku') {
-            // 新增：B站番剧弹幕下载 - 简化流程：获取bvid然后用现有逻辑下载
-            searchBilibiliBangumi(request.title, request.episodeNumber)
-                .then(async (bvid) => {
-                    console.log(`获取到番剧bvid: ${bvid}`);
-
-                    // 使用现有的弹幕下载逻辑
-                    const data = await downloadAllDanmaku(bvid, request.youtubeVideoDuration);
+            searchBilibiliBangumi(request.title, request.episodeNumber, { getWbiKeys, encWbi })
+                .then(async (episode) => {
+                    const data = await downloadAllDanmaku(episode, request.youtubeVideoDuration);
 
                     // 保存弹幕数据 - 使用现有的存储格式
                     const storageData = {
                         [request.youtubeVideoId]: {
-                            bilibili_url: `https://www.bilibili.com/video/${bvid}`,
-                            bilibili_title: `${request.title} 第${request.episodeNumber}话`,
+                            bvid: episode.bvid,
+                            bilibili_url: episode.bilibili_url,
+                            bilibili_title: data.title,
+                            bilibili_pic: data.pic,
+                            bilibili_author: data.author,
                             danmakus: data.danmakus,
                             duration: data.duration,
                             timeOffset: 0,

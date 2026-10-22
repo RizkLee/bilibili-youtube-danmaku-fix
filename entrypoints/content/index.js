@@ -946,7 +946,8 @@ export default defineContentScript({
                                 type: 'downloadBangumiDanmaku',
                                 title: parseResult.title,
                                 episodeNumber: parseResult.episode,
-                                youtubeVideoId: videoId
+                                youtubeVideoId: videoId,
+                                youtubeVideoDuration: document.querySelector('video')?.duration || null
                             });
 
                             if (!isCurrentVideoContext(token, videoId)) {
