@@ -1,321 +1,144 @@
-# B2Y - YouTube/夸克网盘 同步显示 Bilibili 弹幕
+# B2Y Fix — 在 YouTube / 夸克网盘显示 Bilibili 弹幕
 
-> B2Y - 自动将Bilibili的弹幕同步显示在YouTube视频上，同时支持夸克网盘视频播放
+这是 [B2Y（bilibili-youtube-danmaku）](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku) 的社区修改版：在 YouTube 和夸克网盘播放视频时，搜索、匹配并叠加显示 B 站弹幕，并针对番剧弹幕获取、分 P、导入本地 XML 和时间轴对齐做了补充。
 
-🍻关注的 UP 在 Youtube 和 B 站都有投稿，想在 Youtube 看更好的画质又想看弹幕🤔？
+**本项目仓库：** [RizkLee/bilibili-youtube-danmaku-fix](https://github.com/RizkLee/bilibili-youtube-danmaku-fix)
 
-让 YouTube 视频也能拥有 B 站的弹幕氛围！
-关联 B 站 UP 主或手动输入视频链接，同步弹幕到 YouTube 播放页面～
+> **请从本仓库获取代码并自行构建安装。** 原版 B2Y 的 Chrome 应用商店、Firefox 附加组件商店条目及原作者的 Release **不是本修复版**，安装后可能没有下文介绍的功能。目前不提供已验证的本项目商店安装链接或预编译 Release 下载。
 
-## ✅ 支持功能
+## 主要功能
 
-- ✨ 无需任何设置，插件会自动按视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-- ✨ 当多个结果高于匹配度时，默认选择"弹幕最多"的结果，也可设置为"弹出选择"，在结果中手动选择。
-- ✨ 支持时间轴偏移校准
-- ✨ 支持调整弹幕字体大小、透明度、滚动速度、垂直间距
-- ✨ 支持设置弹幕显示区域范围
-- ✨ 支持智能弹幕过滤
-- ✨ 支持弹幕搜索和跳转时间轴
-- ✨ 支持广告片段弹幕智能跳过
-- ✨ 支持 "哔哩哔哩动画" 频道内番剧正片自动获取弹幕
-- ✨ 也可以手动输入 B 站原视频链接。
-- ✨ 弹幕将在播放时自动显示在视频上方
-- ✨ 可根据需要调节字体大小、透明度、轨道间距、滚动速度等显示参数
-- ✨ 支持导入本地 B站弹幕 XML 文件（离线使用）
-- ✨ 支持 B站分p视频弹幕获取（自动识别 `?p=N` 参数）
+| 功能 | 说明 |
+| --- | --- |
+| YouTube 弹幕 | 按视频标题自动搜索、匹配 B 站视频，也可以粘贴 B 站链接手动匹配 |
+| 夸克网盘弹幕 | 在网盘视频播放页面搜索或手动指定 B 站弹幕来源 |
+| 番剧链接 | 支持 B 站 `/bangumi/play/ep...`（单集）和 `/bangumi/play/ss...`（整季）链接；整季可选择目标剧集 |
+| 大会员番剧弹幕 | 改进番剧信息解析与分段弹幕请求，尝试获取部分原版无法加载的番剧弹幕；实际可用性取决于 B 站接口权限 |
+| 分 P 视频 | 支持普通投稿的 BV/av 链接及 `?p=N` 参数，按指定分 P 获取弹幕 |
+| 本地 XML 导入 | 将本地 B 站弹幕 `.xml` 文件导入当前 YouTube 或夸克网盘视频 |
+| 时间轴对齐 | 提供 `1×`、`24/25×` 和自定义倍率，并保留按秒调整的时间偏移 |
+| 弹幕显示设置 | 字体大小、透明度、滚动速度、显示区域、过滤等；支持搜索弹幕及定位时间点 |
 
-### 夸克网盘 (新增)
-- ✨ 支持夸克网盘在线视频播放
-- ✨ **智能搜索**：自动根据视频标题搜索 B 站相关视频
-- ✨ **悬浮弹窗**：在"播放历史"旁添加"B站弹幕"按钮，悬浮显示搜索结果
-- ✨ **自定义搜索**：支持修改搜索关键词重新搜索
-- ✨ 手动输入 B 站视频链接下载弹幕
-- ✨ 支持弹幕设置（透明度、字体、速度、时间偏移）
-- ✨ 支持全屏模式和倍速播放
-- ✨ 支持导入本地 B站弹幕 XML 文件（离线使用）
+YouTube 的自动匹配可使用**新版标题搜索**，也可在面板中切换到**旧版识别模式**；遇到多个候选结果时，可以选择“弹幕最多”或“弹出选择”。视频匹配与弹幕下载仍受 B 站接口响应、网络环境及视频内容差异影响。
 
-## 🧩 使用方法
+## 安装本修复版
 
-### YouTube
-0. 安装本插件。公开弹幕通常无需登录 B 站；如果接口提示登录、权限不足或触发风控，可尝试在同一浏览器中登录 B 站后重试（无需手动复制或填写 Cookie）。
-1. 打开你在 YouTube 上观看的对应视频
-2. 无需任何设置，插件会自动按 YouTube 视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-3. 当多个结果高于匹配度时，默认选择“弹幕最多”的结果，也可设置为“弹出选择”，在 Popup 中手动选择。
-4. 如果您习惯 2.0 之前的匹配逻辑，可在 Popup 的“识别模式”中切换到“旧版模式”，继续使用 UP 关联和 B 站空间搜索。
-5. 也可以手动输入 B 站原视频链接，包括普通投稿（BV/av，可带 `?p=N` 指定分P）和番剧（`/bangumi/play/ep...` 或 `/bangumi/play/ss...`）。`ep` 链接直接对应一集；`ss` 链接代表整季，输入后请从下拉框选择具体集数，再次点击“手动匹配”。
-6. 弹幕将在播放时自动显示在视频上方
-7. 可根据需要调节字体大小、透明度、轨道间距、滚动速度等显示参数
+目前建议使用 **Chrome** 或 **Microsoft Edge**，从本仓库源码构建并加载扩展。需要在电脑上安装 Node.js 和 npm。
 
-### 夸克网盘
-**方式一：悬浮搜索（推荐）**
-1. 在夸克网盘打开需要观看的视频
-2. 无需任何设置，插件会自动按视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-3. 当多个结果高于匹配度时，默认选择“弹幕最多”的结果，也可设置为“弹出选择”，在结果中手动选择。
-4. 也可以手动输入 B 站原视频链接，包括 BV/av（支持 `?p=N`）与番剧 ep/ss；整季 ss 链接需要先选择具体集数。
-5. 弹幕将在播放时自动显示在视频上方
-6. 可根据需要调节字体大小、透明度、轨道间距、滚动速度等显示参数
-
-### 导入本地XML弹幕文件
-如果你本地有 B站弹幕 XML 文件（从 Bilibili 下载的 `.xml` 格式），可以直接导入：
-1. 打开视频页面（YouTube 或夸克网盘）
-2. 点击扩展图标打开 Popup 面板
-3. 在手动输入区域点击 **「导入本地弹幕」** 按钮
-4. 选择本地的 `.xml` 弹幕文件
-5. 弹幕自动加载到当前视频上
-
-### B站分p视频
-输入 B站链接时支持 `?p=N` 参数，可以获取指定分p的弹幕：
-- 输入 `https://www.bilibili.com/video/BVxxxxxx?p=2` → 获取第2p弹幕
-- 输入 `https://www.bilibili.com/video/BVxxxxxx` → 默认第1p
-
-## ✨ 特色功能
-
-- **自动匹配：** 无需任何设置，插件会自动按视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-- **多匹配处理：** 当多个结果高于匹配度时，默认选择"弹幕最多"的结果，也可设置为"弹出选择"，在结果中手动选择。
-- **番剧支持：** "哔哩哔哩动画Anime Made By Bilibili " 频道下的番剧正片，可自动获取弹幕（无需配置）
-- **本地导入：** 支持导入本地 B站弹幕 XML 文件，无需联网也能加载弹幕。
-- **分p支持：** 输入 B站分p视频链接时自动获取对应分p的弹幕。
-
-**弹幕时间轴对齐：** YouTube 和夸克网盘面板新增「弹幕时间轴倍率」，默认为 `1×`。如果 B 站把原本 24fps 的内容按 25fps 播放，而 YouTube 是正常的 24fps，选择「B站25fps → 视频24fps（24/25×）」；例如在 YouTube 播放到 100 秒时读取 B 站第 96 秒的弹幕。也可输入 `0.25–4` 的自定义倍率。原有「时间轴偏移」仍可微调片头差异：**弹幕时间 = 视频播放时间 × 倍率 + 偏移（秒）**。滚动速度设置单独控制弹幕的屏幕移动速度。
-
-**自行安装此修复版：** 在仓库执行 `npm install`、`npm run build`，然后通过 Chrome/Edge 的「管理扩展程序 → 开发者模式 → 加载已解压的扩展程序」选择 `.output/chrome-mv3`。上方应用商店链接指向原作者发布的版本，可能不包含本修复版的功能。
-
-本仓库基于 [ahaduoduoduo/bilibili-youtube-danmaku](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku)（MIT License），并整合 [hansamar 的 XML 导入及分P支持 PR #43](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/pull/43)。保留原始 `LICENSE` 中的版权声明。
-
-**关于大会员番剧与 Cookie：** 插件读取的是 B 站弹幕接口，并不会下载或解锁付费视频。能否读取弹幕由 B 站接口实际返回结果决定，部分大会员剧集在未登录时仍能获取弹幕；若遇到登录限制、地区限制或风控，插件会提示下载失败。插件使用浏览器自带的凭据机制（`credentials: 'include'`），不要求用户导出 Cookie，也不会通过插件界面索要 Cookie。弹幕与 YouTube 版本若存在片头、广告或剪辑差异，需要按实际内容调整时间偏移。
-
-## 🌐 浏览器支持
-
-本扩展基于现代化的 **WXT 框架** 构建，支持多浏览器部署：
-
-- ✅ **Chrome** 
-- ✅ **Firefox** 
-- ✅ **Edge** 
-- ✅ **Safari** 
-- ❓**其他 Chromium 内核浏览器** (国内套壳浏览器, Opera 等) - 理论支持
-
-## 📦 安装方式
-
-### Chrome 应用商店版本（推荐）
-
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dmkbhbnbpfijhgpnfahfioedledohfja.svg)](https://chromewebstore.google.com/detail/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili/dmkbhbnbpfijhgpnfahfioedledohfja)
-
-**[🚀 点击前往 Chrome 应用商店安装](https://chromewebstore.google.com/detail/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili/dmkbhbnbpfijhgpnfahfioedledohfja)**
-
-1. 打开上方链接
-2. 点击"添加至 Chrome"按钮
-3. 确认安装即可使用
-
-### Firefox 商店版本
-
-[![Firefox Addons](https://img.shields.io/amo/v/b2y-youtube-同步显示-bilibili-弹幕.svg)](https://addons.mozilla.org/zh-CN/firefox/addon/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili-%E5%BC%B9%E5%B9%95/)
-
-**[🦊 点击前往 Firefox 附加组件商店安装](https://addons.mozilla.org/zh-CN/firefox/addon/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili-%E5%BC%B9%E5%B9%95/)**
-
-1. 打开上方链接
-2. 点击"添加到 Firefox"按钮
-3. 确认安装即可使用
-
-### Edge 
-
-建议安装Chrome 商店版本
-
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dmkbhbnbpfijhgpnfahfioedledohfja.svg)](https://chromewebstore.google.com/detail/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili/dmkbhbnbpfijhgpnfahfioedledohfja)
-
-**[🚀 点击前往 Chrome 应用商店安装](https://chromewebstore.google.com/detail/b2y-youtube-%E5%90%8C%E6%AD%A5%E6%98%BE%E7%A4%BA-bilibili/dmkbhbnbpfijhgpnfahfioedledohfja)**
-
-### Safari
-
-暂未上架，目前仍需手动安装
-
-
-### 手动安装（支持多浏览器）
-
-> 💡 **注意：** 优先推荐使用应用商店版本，仅在无法访问时才使用手动安装。
-
-1. 前往本项目的 [Release 页面](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/releases) 下载最新版本对应的文件。
-
-#### 🌐 Chrome 浏览器
-- 下载 `B2Y-YouTube-Bilibili-Danmaku-vX.X.X-chrome.zip`
-- 解压到本地文件夹
-- 打开 `chrome://extensions/`
-- 开启"开发者模式"
-- 点击"加载已解压的扩展程序"，选择解压后的文件夹
-
-#### 🦊 Firefox 浏览器
-- 下载 `B2Y-YouTube-Bilibili-Danmaku-vX.X.X-firefox.zip`
-- 打开 `about:debugging`
-- 点击"此 Firefox"
-- 点击"临时载入附加组件"
-- 选择下载的 ZIP 文件
-- ❗️ 注意，当前 Friefox 下仍存在性能问题，目前仍有卡顿问题
-- ❗️ 注意，当前 Friefox 重启需要重新加载插件
-
-#### 🌊 Edge 浏览器
-- 下载 `B2Y-YouTube-Bilibili-Danmaku-vX.X.X-edge.zip`
-- 解压到本地文件夹
-- 打开 `edge://extensions/`
-- 开启"开发人员模式"
-- 点击"加载解压缩的扩展"，选择解压后的文件夹
-
-#### 🧭 Safari 浏览器
-- 下载 `B2Y-YouTube-Bilibili-Danmaku-vX.X.X-safari.zip`
-- 打开 Safari 浏览器，进入"开发" > "开发者设置" > "允许未签名的拓展"
-- 点击"添加临时扩展"
-- 选择下载的 ZIP 文件
-- 在使用前点击插件图标，允许扩展访问网页内容(如果提示)
-- ❗️ 注意，当前 Safari 重启需要重新加载插件
-
-## 🛠 开发者指南
-
-本项目采用现代化的 **WXT 框架**，提供优秀的开发体验：
-
-### 技术栈
-- 🎯 **WXT Framework** - 现代化浏览器扩展开发框架
-- 🚀 **ES6 模块化** - 使用 import/export 语法
-- ⚡ **热重载** - 开发时自动刷新扩展
-- 🔄 **代码分割** - 自动优化资源加载
-- 🌐 **跨浏览器** - 一套代码支持多浏览器
-
-### 开发环境
+1. 下载**本仓库**源码：使用 Git 克隆，或者在本仓库页面点击 **Code → Download ZIP** 并解压。
+2. 在项目根目录打开终端，安装依赖并构建。
+3. 在浏览器中打开扩展管理页面，启用开发者模式，选择构建产生的文件夹。
 
 ```bash
-# 安装依赖
-npm install
-
-# Chrome 开发模式（支持热重载）
-npm run dev
-
-# Firefox 开发模式
-npm run dev:firefox
-
-# Edge 开发模式
-npm run dev:edge
-
-# 生产构建
+git clone https://github.com/RizkLee/bilibili-youtube-danmaku-fix.git
+cd bilibili-youtube-danmaku-fix
+npm ci
 npm run build
-
-# 各浏览器构建
-npm run build:chrome
-npm run build:firefox
-npm run build:edge
-
-# 打包扩展文件
-npm run zip
-npm run zip:chrome
-npm run zip:firefox
-npm run zip:edge
 ```
 
-#### 开发环境配置
+- **Chrome：** 打开 `chrome://extensions/` → 开启**开发者模式** → **加载已解压的扩展程序** → 选择项目中的 `.output/chrome-mv3` 文件夹。
+- **Edge：** 打开 `edge://extensions/` → 开启**开发人员模式** → **加载解压缩的扩展** → 选择同一个 `.output/chrome-mv3` 文件夹。
 
-为了方便开发，项目已配置持久化浏览器数据目录，这样可以保存登录状态和Cookie，避免每次启动开发环境都需要重新登录B站。
+如果使用 ZIP 下载源码，请直接在解压后的项目目录执行 `npm ci` 和 `npm run build`，无需运行 `git clone`。若电脑上已经安装了原版 B2Y，建议先停用原版，以免两个扩展同时显示弹幕。
 
-配置文件：`web-ext.config.js`
+仓库还提供 Firefox、Edge、Safari 对应的 WXT 构建命令，见下文“开发与构建”。**已执行验证的是 Chrome MV3 构建**；其他浏览器的安装、兼容性及实际使用情况尚未全面验证，不能据此保证可用。
 
-**Chrome/Edge 浏览器：**
-- 浏览器数据将保存在 `.wxt/chrome-data/` 目录下
-- 该目录已在 `.gitignore` 中被忽略，不会被提交到版本控制
-- 首次运行 `npm run dev` 后，登录B站的状态会被保存
-- 后续开发时无需重复登录
+## 使用方法
 
-**Firefox 浏览器：**
-- 支持通过自定义配置文件实现持久化（需要额外步骤）
-- **设置步骤**：
-  1. 在Firefox中输入 `about:profiles`
-  2. 创建新配置文件 `wxt-dev-profile` (可为任意名称，但需要在`web-ext.config.js`文件中填写对应的Profile名称)
-  3. 点击 "Launch profile in new browser"
-  4. 在新窗口中登录B站并保存状态
-  5. 关闭窗口，运行 `npm run dev:firefox`
-- ⚠️ **重要**：直接在开发模式窗口中的登录不会被保存，必须先在正常Firefox窗口中建立登录状态
+### 1. 自动匹配弹幕
 
-### 项目结构
-```
-bilibili-youtube-danmaku/
-├── entrypoints/          # 扩展入口点
-│   ├── background/       # 后台脚本
-│   ├── content/          # YouTube 内容脚本
-│   ├── quark.content/    # 夸克网盘 内容脚本
-│   └── popup/            # 弹窗界面
-├── utils/                # 工具模块  
-├── public/               # 静态资源
-└── wxt.config.js         # WXT 配置文件
+在 YouTube 打开一个普通视频播放页，或在夸克网盘打开视频播放器。扩展会尝试按视频标题寻找对应的 B 站投稿并加载弹幕。点击浏览器工具栏中的扩展图标，可以查看匹配状态、调整搜索或修改弹幕显示设置。
+
+如果自动匹配到的不是目标视频，可在面板中搜索其他候选结果，或直接使用下文的手动匹配。YouTube 的“识别模式”和“多匹配处理方式”也可以按需调整。
+
+### 2. 粘贴 B 站视频链接手动匹配
+
+在扩展面板的手动匹配输入框中粘贴 B 站视频链接，点击**手动匹配**。支持以下链接形式：
+
+```text
+https://www.bilibili.com/video/BVxxxxxxxxxx
+https://www.bilibili.com/video/BVxxxxxxxxxx?p=2
+https://www.bilibili.com/video/av123456
+https://www.bilibili.com/bangumi/play/ep65413
+https://www.bilibili.com/bangumi/play/ss231879
 ```
 
+- **BV / av 投稿：** 默认使用第 1 P；如果视频有多个分 P，可加 `?p=2` 等参数。
+- **ep 番剧链接：** 指定某一集，直接尝试获取该集弹幕。
+- **ss 番剧链接：** 指向整季。第一次点击手动匹配后，面板会加载剧集列表；**选定具体剧集，再次点击手动匹配**。
 
-## 📝 更新日志
+即使视频本身属于 B 站大会员内容，弹幕接口也可能可以读取；但插件**不会解锁付费视频或绕过 B 站的账号、地区等访问限制**。如果接口拒绝请求，请参阅常见问题。
 
-### 未发布
-- ✨ YouTube 和夸克网盘支持导入本地 B站弹幕 XML 文件（离线使用）
-- ✨ 支持 B站分p视频弹幕获取，输入 `?p=N` 链接自动匹配对应分p
+### 3. 导入本地 XML 弹幕
 
-### 2026-05-15
-2.0.0
-  更新：
-- ✨ 无需任何设置，插件会自动按视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-- ✨ YouTube 默认使用新版标题搜索识别，不再要求先关联 UP 主。
-- ✨ 夸克网盘支持自动按视频标题搜索 B 站结果，并根据标题匹配度自动加载弹幕。
-- ✨ 当多个结果高于匹配度时，默认选择"弹幕最多"的结果，也可设置为"弹出选择"，在结果中手动选择。
-- ✨ YouTube 保留旧版识别模式，可在 Popup 的"识别模式"中切换。
+如果已经取得对应视频的 B 站 XML 弹幕文件：
 
-  修复：
-- ⚙️ 修复 YouTube 支持 SPA 页面导致无法匹配弹幕的问题（重大历史遗留问题🤣，需使用新版匹配模式）。
-- ⚙️ 修复 B 站搜索遇到屏蔽关键词触发 `csrf` 拦截问题。
-- ⚙️ 修复 WBI key 增加 6 小时缓存，减少重复请求和启动等待。
+1. 打开目标 YouTube 视频或夸克网盘视频页面。
+2. 点击扩展图标，找到**导入本地弹幕**按钮。
+3. 选择本地 `.xml` 文件；导入后即可在当前视频上显示弹幕。
 
-### 2026-01-19
-1.2.0
-- ✨ 新增夸克网盘视频播放页弹幕支持
-- ✨ 智能搜索：自动根据视频标题搜索 B 站匹配视频
-- ✨ 悬浮弹窗：鼠标悬浮「B站弹幕」按钮即可选择匹配视频
-- ✨ 自定义搜索：支持手动修改搜索关键词重新搜索
-- ✨ 一键加载：点击搜索结果直接下载并显示弹幕
+这种方式可以避免在线获取弹幕接口失败的问题，适用于已有 XML 文件的情况。导入结果保存在浏览器的扩展本地存储中，关联当前视频；重新导入可能替换当前视频的既有弹幕数据。不要将本功能误认为可以直接下载受限制视频的弹幕文件。
 
-### 2025-08-19
-1.1.5
-- ✨ 优化了标题匹配功能
-- ✨ 优化了智能搜索时的关键词
-- ✨ 增加了广告片段弹幕自动跳过功能，感谢 @[BilibiliSponsorBlock项目](https://github.com/hanydd/BilibiliSponsorBlock) 
+## 对齐弹幕时间轴
 
-### 2025-08-19
-1.1.3
-- ✨ 修复了部分浏览器下的弹幕闪烁问题
-- ✨ 提升了部分浏览器的性能
+部分片源发生了 24fps / 25fps 速度差异：例如 YouTube 按 24fps 播放，但 B 站将相同帧序列按 25fps 播放，此时 B 站版本时长更短，弹幕会逐渐偏离。仅修改固定偏移量无法修正这种**随播放时间累积**的误差。
 
-### 2025-08-18
-1.1.2
-- ✨ 更换了 Web Animations API 以实现 Safari 和 Firefox 的兼容
-- ✨ 支持四个主流浏览器完整版本构建：Chrome、Firefox、Edge、Safari
-- ✨ 优化了动画性能，提供更流畅的弹幕显示体验
+在 YouTube 或夸克网盘的扩展面板中找到 **弹幕时间轴倍率**：
 
-### 2025-08-17
-1.1.1 
-- ✨WXT 框架迁移，感谢 @[lemonteaau](https://github.com/lemonteaau) ）
-- ✨修复了弹幕 Z-index 问题，感谢 @[lemonteaau](https://github.com/lemonteaau) ）
-- ✨增加了 10% 的弹幕覆盖范围
+| 情况 | 选择 |
+| --- | --- |
+| 双方时间轴一致 | **正常（1×）** |
+| B 站 25fps，当前视频 24fps | **B站25fps → 视频24fps（24/25×）**，即 `0.96` |
+| 存在其他比例差异 | **自定义**，输入 `0.25` 至 `4` 的倍率 |
 
-### 2025-08-08
-1.1.0
-- ✨ 添加智能搜索 up 主 功能，没有绑定 UP 主时可以快速搜索 UP 主（https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/pull/4 ，感谢 @[luoling8192](https://github.com/luoling8192) ）
-- ✨ 时间轴偏移功能优化，可以手动输入时间（有朋友反馈部分视频偏移长达五分钟）
+计算关系为：
 
-### 2025-08-06
-1.0.9
-- ✨ 优化了视频标题匹配模式
-- ✨ 提供了公共匹配库
+```text
+读取的 B 站弹幕时间（秒） = 当前视频播放时间（秒） × 弹幕时间轴倍率 + 时间偏移（秒）
+```
 
-### 2025-08-05
-1.0.8
-- ✨ 添加多语言标题自动匹配功能（https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/pull/1 ，感谢 @[lemonteaau](https://github.com/lemonteaau) ）
+例如选择 `0.96` 后，当前视频播放到 **100 秒** 时，会取 B 站约 **96 秒** 处的弹幕。如果双方片头长度不同，可以再用**时间偏移**进行微调。**滚动速度**只影响弹幕在屏幕上移动的速度，与时间轴倍率无关。
 
-1.0.7
-- ✨ 支持 "哔哩哔哩动画Anime Made By Bilibili " 频道自动获取原创番剧弹幕
+时间轴倍率作为扩展设置保存，切换其他视频后如果不再需要校正，请将其恢复到 `1×`。
 
-### 2025-08-04
-1.0.6
-- ✨ 优化了视频标题匹配模式
-- ⚡ 提高了弹幕帧率
+## 常见问题
 
-### [☕️支持我～](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/blob/main/DONATE.md)
+**需要登录 B 站或手动提供 Cookie 吗？**
 
-### [☕️看看我做的 Sora 去水印小工具](https://nosorawm.app/)
+通常，读取公开弹幕不必登录。若 B 站接口对某些番剧或请求要求登录，可尝试在**同一浏览器**中登录自己的 B 站账号再重试。插件的网络请求会按实现使用浏览器的凭据机制，**无需把 Cookie 复制粘贴到扩展面板，也无需导出 Cookie**。是否成功仍由 B 站接口决定，登录不保证一定能获取弹幕。
+
+**为什么粘贴了番剧链接仍无法获取？**
+
+请先确认 `ss` 整季链接已选定集数，并且对应视频所在地区和账号具备必要权限。也可能遇到接口风控、接口变更或网络错误。可尝试使用具体 `ep` 链接；如果已有合法获取的 XML 文件，则可通过本地导入加载。
+
+**为什么弹幕出现了，但与视频内容不同步？**
+
+先检查是否选错分 P 或番剧集数，再用时间偏移修正片头差异。如果偏差随播放时间不断增大，再调整时间轴倍率。若两边视频存在删减、重剪或广告差异，单一倍率和偏移量可能无法使所有段落完全对齐。
+
+**为什么安装了商店里的 B2Y，却找不到这些功能？**
+
+商店条目由原作者发布，与本仓库的代码不是同一发布渠道。请按照上面的“安装本修复版”步骤，从 `RizkLee/bilibili-youtube-danmaku-fix` 构建安装。
+
+## 开发与构建
+
+项目使用 [WXT](https://wxt.dev/) 构建，主要代码位于 `entrypoints/`（后台、YouTube、夸克网盘及弹窗界面），公共逻辑位于 `utils/`。可使用下面的命令：
+
+```bash
+npm ci                # 安装锁定版本的依赖
+npm run dev           # 开发模式
+npm run build         # 默认 Chrome 构建
+npm run build:firefox # Firefox 构建（未全面验证）
+npm run build:edge    # Edge 构建（未全面验证）
+npm run build:safari  # Safari 构建（未全面验证）
+node --test tests/*.test.mjs
+```
+
+这里的浏览器构建命令表示**项目提供相应构建能力**，不代表已通过所有浏览器的实际安装测试。测试命令主要覆盖番剧链接、弹幕分段以及时间轴计算等逻辑，无法替代真实 B 站账号、地区与浏览器环境下的验证。
+
+欢迎通过本仓库的 Issues 反馈问题；反馈时请提供目标页面类型、B 站链接形式、复现步骤和错误信息，**不要提交 Cookie 或其他账号凭据**。
+
+## 来源、致谢与许可
+
+本项目基于 [ahaduoduoduo/bilibili-youtube-danmaku](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku) 修改，并整合了 [hansamar 提交的本地 XML 导入与分 P 支持（上游 PR #43）](https://github.com/ahaduoduoduo/bilibili-youtube-danmaku/pull/43)。感谢原作者与贡献者的工作。
+
+项目遵循仓库中的 [MIT License](LICENSE)，并保留原作者版权声明。此仓库是独立维护的修改版，与原作者的浏览器商店发行版无关。
