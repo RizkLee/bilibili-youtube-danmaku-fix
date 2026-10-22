@@ -21,9 +21,12 @@ export function parseBilibiliSource(input) {
     if (ep) return { episodeId: Number(ep[1]) };
     const ss = url.pathname.match(/^\/bangumi\/play\/ss(\d+)\/?$/i);
     if (ss) return { seasonId: Number(ss[1]) };
+    const rawPage = url.searchParams.get('p');
+    const page = rawPage === null ? null : Number(rawPage);
+    if (rawPage !== null && (!/^\d+$/.test(rawPage) || !Number.isSafeInteger(page) || page < 1)) return null;
     const bv = url.pathname.match(/^\/video\/(BV[\w]+)\/?$/i);
-    if (bv) return { bvid: bv[1] };
+    if (bv) return { bvid: bv[1], ...(page === null ? {} : { p: page }) };
     const av = url.pathname.match(/^\/video\/av(\d+)\/?$/i);
-    if (av) return { bvid: avToBv(av[1]) };
+    if (av) return { bvid: avToBv(av[1]), ...(page === null ? {} : { p: page }) };
     return null;
 }

@@ -70,6 +70,8 @@
                     />
                     <div class="button-group">
                         <button id="quark-download-btn">下载弹幕</button>
+                        <button id="quark-import-xml-btn">导入本地弹幕</button>
+                        <input type="file" id="quark-xml-file-input" accept=".xml" style="display:none" />
                     </div>
                 </div>
             </div>
@@ -152,6 +154,17 @@
                             <span class="time-unit">s</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="quark-timeline-rate-select">弹幕时间轴倍率：</label>
+                    <select id="quark-timeline-rate-select">
+                        <option value="1">正常（1×）</option>
+                        <option value="0.96">B站25fps → 视频24fps（24/25×）</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                    <input type="number" id="quark-timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
+                    <p class="control-hint">按 视频时间 × 倍率 + 偏移量 对齐弹幕；与滚动速度无关。</p>
                 </div>
 
                 <div class="control-group">
@@ -360,6 +373,8 @@
                             查看 B站空间
                         </button>
                         <button id="download-btn">手动匹配</button>
+                        <button id="youtube-import-xml-btn">导入本地弹幕</button>
+                        <input type="file" id="youtube-xml-file-input" accept=".xml" style="display:none" />
                     </div>
                 </div>
             </div>
@@ -463,6 +478,17 @@
                             <span class="time-unit">s</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="timeline-rate-select">弹幕时间轴倍率：</label>
+                    <select id="timeline-rate-select">
+                        <option value="1">正常（1×）</option>
+                        <option value="0.96">B站25fps → 视频24fps（24/25×）</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                    <input type="number" id="timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
+                    <p class="control-hint">按 视频时间 × 倍率 + 偏移量 对齐弹幕；与滚动速度无关。</p>
                 </div>
 
                 <div class="control-group">

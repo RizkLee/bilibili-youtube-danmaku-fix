@@ -3,6 +3,7 @@
 // 导入番剧处理模块
 import { searchBilibiliBangumi, getBangumiEpisodeDetail, getBangumiSeasonEpisodes } from './bangumi.js';
 import { downloadDanmakuSegments } from '../../utils/danmaku-segments.js';
+import { areDurationsAligned } from '../../utils/timeline.js';
 // 引入protobuf解析器和OpenCC库
 import '../../lib/protobuf-parser.js';
 import '../../lib/opencc.min.js';
@@ -465,7 +466,7 @@ export default defineBackground(() => {
     }
 
     // 获取视频信息
-    async function getVideoInfo(bvid) {
+    async function getVideoInfo(bvid, p = null) {
         const response = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
             credentials: 'include'
         });
@@ -474,10 +475,23 @@ export default defineBackground(() => {
         if (data.code !== 0) throw new Error(`获取视频信息失败: ${data.message}`);
         if (!data.data?.aid || !data.data?.cid) throw new Error('无法获取视频信息');
 
+        // 处理分p：如果有p参数且pages数组存在，使用对应页的cid和duration
+        let cid = data.data.cid;
+        let duration = data.data.duration;
+        const pages = data.data.pages;
+        if (p !== null && p !== undefined) {
+            if (!Number.isSafeInteger(p) || p < 1 || !Array.isArray(pages) || p > pages.length) {
+                throw new Error(`分P编号无效（可用范围：1-${pages?.length || 1}）`);
+            }
+            cid = pages[p - 1].cid;
+            duration = pages[p - 1].duration;
+            console.log(`[getVideoInfo] 使用分p=${p} 的 cid=${cid}, duration=${duration}`);
+        }
+
         return {
             aid: data.data.aid,
-            cid: data.data.cid,
-            duration: data.data.duration,
+            cid: cid,
+            duration: duration,
             title: data.data.title,
             pic: data.data.pic || '',
             author: data.data.owner?.name || ''
@@ -703,12 +717,13 @@ export default defineBackground(() => {
             const bilibiliVideoDuration = skipSegments[0]?.videoDuration;
 
             if (bilibiliVideoDuration && youtubeVideoDuration) {
-                const durationDiff = Math.abs(bilibiliVideoDuration - youtubeVideoDuration);
+                const settings = (await browser.storage.local.get('danmakuSettings')).danmakuSettings || {};
+                const timelineRate = settings.timelineRate ?? 1;
 
-                if (durationDiff <= 5) {
+                if (areDurationsAligned(bilibiliVideoDuration, youtubeVideoDuration, timelineRate)) {
                     // 长度相近，YouTube可能未去sponsor，跳过处理
                     console.log(
-                        `YouTube视频长度(${youtubeVideoDuration}s)与bilibili原始长度(${bilibiliVideoDuration}s)相近，跳过sponsor处理`
+                        `校正后YouTube视频长度(${youtubeVideoDuration}s × ${timelineRate})与bilibili原始长度(${bilibiliVideoDuration}s)相近，跳过sponsor处理`
                     );
                     return danmakus;
                 }
@@ -764,9 +779,11 @@ export default defineBackground(() => {
     async function downloadAllDanmaku(source, youtubeVideoDuration) {
         try {
             const wbiKeys = await getWbiKeys();
-            const info = typeof source === 'string' ? await getVideoInfo(source) : source;
+            const info = typeof source === 'string'
+                ? await getVideoInfo(source)
+                : source.cid ? source : await getVideoInfo(source.bvid, source.p);
             const { cid, duration, aid, title, pic, author } = info;
-            const bvid = typeof source === 'string' ? source : info.bvid;
+            const bvid = typeof source === 'string' ? source : source.bvid || info.bvid;
             if (!Number.isSafeInteger(Number(cid)) || Number(cid) <= 0 ||
                 !Number.isSafeInteger(Number(aid)) || Number(aid) <= 0 ||
                 !Number.isFinite(Number(duration)) || Number(duration) <= 0) {
@@ -813,7 +830,7 @@ export default defineBackground(() => {
             formattedDanmakus.sort((a, b) => a.time - b.time);
 
             // 移除广告片段弹幕
-            const processedDanmakus = info.episodeId
+            const processedDanmakus = info.episodeId || source?.p > 1
                 ? formattedDanmakus
                 : await removeAdSegments(formattedDanmakus, bvid, youtubeVideoDuration);
 
@@ -832,7 +849,9 @@ export default defineBackground(() => {
                 author: author,
                 duration: duration,
                 bvid,
-                bilibili_url: info.bilibili_url || `https://www.bilibili.com/video/${bvid}`
+                bilibili_url: info.bilibili_url || (source?.p
+                    ? `https://www.bilibili.com/video/${bvid}?p=${source.p}`
+                    : `https://www.bilibili.com/video/${bvid}`)
             };
         } catch (error) {
             throw error;
@@ -1618,7 +1637,8 @@ export default defineBackground(() => {
         if (request.type === 'downloadDanmaku') {
             Promise.resolve()
                 .then(async () => downloadAllDanmaku(
-                    request.episodeId ? await getBangumiEpisodeDetail(request.episodeId) : request.bvid,
+                    request.episodeId ? await getBangumiEpisodeDetail(request.episodeId) :
+                        request.p ? { bvid: request.bvid, p: request.p } : request.bvid,
                     request.youtubeVideoDuration
                 ))
                 .then(async (data) => {
@@ -1725,9 +1745,16 @@ export default defineBackground(() => {
             return true; // 保持消息通道开启
         } else if (request.type === 'downloadDanmakuForQuark') {
             // Quark 专用：下载弹幕并保存（使用 quark_ 前缀）
-            downloadAllDanmaku(request.bvid, request.videoDuration)
+            downloadAllDanmaku(
+                request.p ? { bvid: request.bvid, p: request.p } : request.bvid,
+                request.videoDuration
+            )
                 .then(async (data) => {
                     const matchInfo = request.matchInfo || {};
+                    // 构建bilibili_url，分p时带上p参数
+                    const bilibiliUrl = request.p
+                        ? `https://www.bilibili.com/video/${request.bvid}?p=${request.p}`
+                        : `https://www.bilibili.com/video/${request.bvid}`;
                     // 保存弹幕数据（使用 quark_ 前缀）
                     const storageKey = request.quarkVideoId?.startsWith('quark_')
                         ? request.quarkVideoId
@@ -1735,7 +1762,7 @@ export default defineBackground(() => {
                     const storageData = {
                         [storageKey]: {
                             bvid: request.bvid,
-                            bilibili_url: `https://www.bilibili.com/video/${request.bvid}`,
+                            bilibili_url: bilibiliUrl,
                             bilibili_title: data.title,
                             bilibili_pic: matchInfo.pic || data.pic || '',
                             bilibili_author: matchInfo.author || data.author || '',

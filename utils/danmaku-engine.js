@@ -1,3 +1,5 @@
+import { normalizeTimelineRate, toDanmakuTime } from './timeline.js';
+
 class DanmakuEngine {
     constructor(container) {
         this.container = container;
@@ -7,6 +9,7 @@ class DanmakuEngine {
         this.settings = {
             enabled: true,
             timeOffset: 0,
+            timelineRate: 1,
             opacity: 100,
             fontSize: 24,
             speed: 1.0, // 添加速度控制
@@ -242,6 +245,7 @@ class DanmakuEngine {
     updateSettings(settings) {
         const oldSettings = { ...this.settings };
         this.settings = { ...this.settings, ...settings };
+        this.settings.timelineRate = normalizeTimelineRate(this.settings.timelineRate);
 
         // 更新CSS变量
         this.stage.style.setProperty('--danmaku-font-size', `${this.settings.fontSize}px`);
@@ -262,7 +266,9 @@ class DanmakuEngine {
             this.pause();
         } else {
             // 检查weight阈值是否发生变化
-            if (oldSettings.weightThreshold !== this.settings.weightThreshold) {
+            if (oldSettings.weightThreshold !== this.settings.weightThreshold ||
+                oldSettings.timelineRate !== this.settings.timelineRate ||
+                oldSettings.timeOffset !== this.settings.timeOffset) {
                 console.log(
                     `Weight阈值变化: ${oldSettings.weightThreshold} → ${this.settings.weightThreshold}`
                 );
@@ -310,9 +316,10 @@ class DanmakuEngine {
             this.resetDanmakuStates();
 
             // 如果视频正在播放，重新同步弹幕
-            if (this.video && !this.video.paused) {
+            if (this.video) {
                 this.resyncDanmakus();
-                this.start();
+                if (this.video.paused) this.pause();
+                else this.start();
             }
 
             console.log('弹幕重建完成');
@@ -379,7 +386,7 @@ class DanmakuEngine {
     checkAndEmitDanmakus() {
         if (!this.video || !this.settings.enabled) return;
 
-        const currentTime = this.video.currentTime + this.settings.timeOffset;
+        const currentTime = this.getDanmakuTime();
 
         // 发射新弹幕
         const newDanmakus = this.danmakus.filter((d) => {
@@ -474,8 +481,9 @@ class DanmakuEngine {
             track.items.forEach((item) => {
                 if (item.animation && item.danmaku) {
                     // 重新计算弹幕应该的进度
-                    const currentVideoTime = this.video.currentTime + this.settings.timeOffset;
-                    const visualElapsed = (currentVideoTime - item.danmaku.time) / newRate;
+                    const currentVideoTime = this.getDanmakuTime();
+                    const visualElapsed = (currentVideoTime - item.danmaku.time) /
+                        (newRate * this.settings.timelineRate);
                     const progressMs = Math.max(0, visualElapsed * 1000);
                     const duration = item.animation.effect.getTiming().duration;
 
@@ -492,14 +500,18 @@ class DanmakuEngine {
     // 计算考虑播放速度的视觉经过时间
     calculateVisualElapsed(videoTime, danmakuStartTime, playbackRate) {
         const realElapsed = videoTime - danmakuStartTime;
-        return realElapsed / playbackRate; // 播放速度越快，视觉经过时间越慢
+        return realElapsed / (playbackRate * this.settings.timelineRate);
+    }
+
+    getDanmakuTime() {
+        return toDanmakuTime(this.video?.currentTime || 0, this.settings.timelineRate, this.settings.timeOffset);
     }
 
     // 重新同步弹幕显示
     resyncDanmakus() {
         if (!this.video || !this.settings.enabled) return;
 
-        const currentTime = this.video.currentTime + this.settings.timeOffset;
+        const currentTime = this.getDanmakuTime();
 
         // 清空当前显示的弹幕
         this.clear();
@@ -587,7 +599,7 @@ class DanmakuEngine {
 
         // 设置动画进度到已经过的时间
         // 弹幕视觉速度保持恒定，需要根据播放速度反算实际经过时间
-        const visualElapsed = elapsed / currentPlaybackRate; // 视觉上的经过时间
+        const visualElapsed = elapsed / (currentPlaybackRate * this.settings.timelineRate);
         const progressMs = visualElapsed * 1000;
         animation.currentTime = Math.max(0, Math.min(progressMs, adjustedDuration));
 
@@ -665,7 +677,7 @@ class DanmakuEngine {
         const item = {
             elem: elem,
             animation: animation,
-            startVideoTime: this.video?.currentTime + this.settings.timeOffset || 0,
+            startVideoTime: this.getDanmakuTime(),
             baseDuration: baseDuration,
             width: danmakuWidth,
             danmaku: danmaku
@@ -679,7 +691,7 @@ class DanmakuEngine {
         if (!this.video) return this.tracks[0];
 
         const stageWidth = this.stage.offsetWidth;
-        const currentVideoTime = this.video.currentTime + this.settings.timeOffset;
+        const currentVideoTime = this.getDanmakuTime();
         const playbackRate = this.video.playbackRate || 1.0;
 
         for (const track of this.tracks) {

@@ -1564,13 +1564,15 @@ export default defineContentScript({
             try {
                 const danmakuVideo = danmakuEngine.video;
                 const timeOffset = danmakuEngine.settings ? danmakuEngine.settings.timeOffset : 0;
-                const adjustedTime = danmakuVideo ? danmakuVideo.currentTime + timeOffset : null;
+                const timelineRate = danmakuEngine.settings?.timelineRate || 1;
+                const adjustedTime = danmakuVideo ? danmakuVideo.currentTime * timelineRate + timeOffset : null;
 
                 return {
                     弹幕引擎视频时间: danmakuVideo
                         ? Math.round(danmakuVideo.currentTime * 100) / 100 + 's'
                         : 'N/A',
                     弹幕时间偏移: timeOffset + 's',
+                    弹幕时间轴倍率: timelineRate,
                     弹幕调整后时间:
                         adjustedTime !== null ? Math.round(adjustedTime * 100) / 100 + 's' : 'N/A',
                     弹幕引擎状态: danmakuEngine.isStarted ? '运行中' : '已停止',
