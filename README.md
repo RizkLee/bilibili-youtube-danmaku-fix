@@ -4,7 +4,7 @@
 
 **本项目仓库：** [RizkLee/bilibili-youtube-danmaku-fix](https://github.com/RizkLee/bilibili-youtube-danmaku-fix)
 
-> **请从本仓库获取代码并自行构建安装。** 原版 B2Y 的 Chrome 应用商店、Firefox 附加组件商店条目及原作者的 Release **不是本修复版**，安装后可能没有下文介绍的功能。目前不提供已验证的本项目商店安装链接或预编译 Release 下载。
+> **本修复版已提供 [GitHub Releases 安装包](https://github.com/RizkLee/bilibili-youtube-danmaku-fix/releases/latest)。** Chrome 和 Edge 用户可直接下载对应 ZIP 解压安装，**无需 Node.js、npm 或自己构建**。原作者的 Chrome / Firefox 商店条目及 Release 不包含本项目的新增功能。
 
 ## 主要功能
 
@@ -21,27 +21,38 @@
 
 YouTube 的自动匹配可使用**新版标题搜索**，也可在面板中切换到**旧版识别模式**；遇到多个候选结果时，可以选择“弹幕最多”或“弹出选择”。视频匹配与弹幕下载仍受 B 站接口响应、网络环境及视频内容差异影响。
 
-## 安装本修复版
+## 下载与安装（Chrome / Edge，无需构建）
 
-目前建议使用 **Chrome** 或 **Microsoft Edge**，从本仓库源码构建并加载扩展。需要在电脑上安装 Node.js 和 npm。
+进入 **[本项目最新 Release 下载页](https://github.com/RizkLee/bilibili-youtube-danmaku-fix/releases/latest)**，展开 **Assets**，根据浏览器下载对应安装包：
 
-1. 下载**本仓库**源码：使用 Git 克隆，或者在本仓库页面点击 **Code → Download ZIP** 并解压。
-2. 在项目根目录打开终端，安装依赖并构建。
-3. 在浏览器中打开扩展管理页面，启用开发者模式，选择构建产生的文件夹。
+| 浏览器 | 下载文件 |
+| --- | --- |
+| Chrome | `B2Y-Fix-v2.1.0-chrome-mv3.zip` |
+| Microsoft Edge | `B2Y-Fix-v2.1.0-edge-mv3.zip` |
+
+文件名会随版本更新；以后下载新版时，选择文件名中含 `chrome-mv3` 或 `edge-mv3` 的 ZIP 即可。**不要误下 GitHub 自动生成的 Source code ZIP**，那是源码，不是现成的扩展程序。
+
+1. **解压**下载的 ZIP 到一个固定文件夹，打开该文件夹应能直接看到 `manifest.json`。
+2. Chrome 打开 `chrome://extensions/`；Edge 打开 `edge://extensions/`。
+3. 开启右上方的**开发者模式 / 开发人员模式**，点击**加载已解压的扩展程序 / 加载解压缩的扩展**。
+4. 选择第 1 步解压的、**包含 `manifest.json` 的文件夹**，即可安装。以后请保留这个文件夹。
+
+如已安装原作者发布的 B2Y，请先停用旧扩展，以免同时叠加两套弹幕。升级本修复版时，可将新版文件解压覆盖到原安装文件夹，再在扩展管理页点击刷新。
+
+**其他浏览器：** 本次 Release 只发布已通过构建验证的 Chrome MV3、Edge MV3 安装包。Firefox 和 Safari 尚无经验证的可直接安装版本；请勿将 Chrome / Edge ZIP 当作对应浏览器的正式发行包。
+
+### 从源码构建（可选）
+
+开发者可从[本仓库](https://github.com/RizkLee/bilibili-youtube-danmaku-fix)获取源码并自行构建：
 
 ```bash
 git clone https://github.com/RizkLee/bilibili-youtube-danmaku-fix.git
 cd bilibili-youtube-danmaku-fix
 npm ci
-npm run build
+npm run build:chrome
 ```
 
-- **Chrome：** 打开 `chrome://extensions/` → 开启**开发者模式** → **加载已解压的扩展程序** → 选择项目中的 `.output/chrome-mv3` 文件夹。
-- **Edge：** 打开 `edge://extensions/` → 开启**开发人员模式** → **加载解压缩的扩展** → 选择同一个 `.output/chrome-mv3` 文件夹。
-
-如果使用 ZIP 下载源码，请直接在解压后的项目目录执行 `npm ci` 和 `npm run build`，无需运行 `git clone`。若电脑上已经安装了原版 B2Y，建议先停用原版，以免两个扩展同时显示弹幕。
-
-仓库还提供 Firefox、Edge、Safari 对应的 WXT 构建命令，见下文“开发与构建”。**已执行验证的是 Chrome MV3 构建**；其他浏览器的安装、兼容性及实际使用情况尚未全面验证，不能据此保证可用。
+生成的 Chrome 扩展文件夹为 `.output/chrome-mv3`，按上述方式加载即可。普通用户使用 Release ZIP 就够了。
 
 ## 使用方法
 
@@ -117,8 +128,7 @@ https://www.bilibili.com/bangumi/play/ss231879
 
 **为什么安装了商店里的 B2Y，却找不到这些功能？**
 
-商店条目由原作者发布，与本仓库的代码不是同一发布渠道。请按照上面的“安装本修复版”步骤，从 `RizkLee/bilibili-youtube-danmaku-fix` 构建安装。
-
+原作者的应用商店版本与本修复版是独立发布渠道。请从 **[本项目 Releases](https://github.com/RizkLee/bilibili-youtube-danmaku-fix/releases/latest)** 下载并加载 ZIP 安装包。
 ## 开发与构建
 
 项目使用 [WXT](https://wxt.dev/) 构建，主要代码位于 `entrypoints/`（后台、YouTube、夸克网盘及弹窗界面），公共逻辑位于 `utils/`。可使用下面的命令：
@@ -135,6 +145,9 @@ node --test tests/*.test.mjs
 
 这里的浏览器构建命令表示**项目提供相应构建能力**，不代表已通过所有浏览器的实际安装测试。测试命令主要覆盖番剧链接、弹幕分段以及时间轴计算等逻辑，无法替代真实 B 站账号、地区与浏览器环境下的验证。
 
+### 自动发布 Release
+
+仓库的 `.github/workflows/release.yml` 在推送 `v版本号` Git 标签后触发：核对 `package.json` 版本、运行自动化测试、构建 Chrome 和 Edge，并将两个可安装 ZIP 附加到 GitHub Release。发布新版本时需先更新 `package.json`、`package-lock.json` 和发布说明，再提交并推送对应标签。普通用户只需从 Releases 下载。
 欢迎通过本仓库的 Issues 反馈问题；反馈时请提供目标页面类型、B 站链接形式、复现步骤和错误信息，**不要提交 Cookie 或其他账号凭据**。
 
 ## 来源、致谢与许可

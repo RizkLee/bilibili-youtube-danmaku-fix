@@ -1,142 +1,61 @@
-name: 自动打包并发布多浏览器扩展
+name: Publish extension release
 
 on:
-    push:
-        branches: [main]
-        paths:
-            - 'package.json' # 只有当 package.json 版本发生变化时才触发
-    workflow_dispatch: # 支持手动触发
+  push:
+    tags:
+      - 'v[0-9]*'
 
 permissions:
-    contents: write
-    pull-requests: write
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-    release:
-        runs-on: ubuntu-latest
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
 
-        steps:
-            - name: 检出代码
-              uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
-            - name: 读取版本号
-              id: get_version
-              run: |
-                  VERSION=$(cat package.json | jq -r '.version')
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "当前版本: $VERSION"
+      - name: Verify tag matches package version
+        run: |
+          node -e "const pkg=require('./package.json'); if ('v'+pkg.version !== process.env.GITHUB_REF_NAME) { console.error('Tag and package version differ'); process.exit(1); }"
 
-            - name: 检查是否已存在该版本的 Release
-              id: check_release
-              run: |
-                  VERSION=${{ steps.get_version.outputs.version }}
-                  if gh release view "v$VERSION" >/dev/null 2>&1; then
-                    echo "exists=true" >> $GITHUB_OUTPUT
-                    echo "版本 v$VERSION 的 Release 已存在，跳过发布"
-                  else
-                    echo "exists=false" >> $GITHUB_OUTPUT
-                    echo "版本 v$VERSION 的 Release 不存在，继续发布"
-                  fi
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install locked dependencies
+        run: npm ci
 
-            - name: 安装依赖
-              if: steps.check_release.outputs.exists == 'false'
-              run: npm ci
+      - name: Run automated tests
+        run: node --test tests/*.test.mjs
 
-            - name: 创建多浏览器扩展包
-              if: steps.check_release.outputs.exists == 'false'
-              run: |
-                  VERSION=${{ steps.get_version.outputs.version }}
-                  CHROME_PACKAGE="B2Y-YouTube-Bilibili-Danmaku-v$VERSION-chrome.zip"
-                  FIREFOX_PACKAGE="B2Y-YouTube-Bilibili-Danmaku-v$VERSION-firefox.zip"
-                  EDGE_PACKAGE="B2Y-YouTube-Bilibili-Danmaku-v$VERSION-edge.zip"
-                  SAFARI_PACKAGE="B2Y-YouTube-Bilibili-Danmaku-v$VERSION-safari.zip"
+      - name: Build Chrome MV3
+        run: npm run build:chrome
 
-                  # 构建 Chrome 版本
-                  echo "🔨 构建 Chrome 扩展..."
-                  npm run build:chrome
+      - name: Build Edge MV3
+        run: npm run build:edge
 
-                  # 打包 Chrome 版本
-                  cd .output/chrome-mv3
-                  zip -r "../../$CHROME_PACKAGE" .
-                  cd ../..
+      - name: Package and verify downloadable ZIPs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for browser in chrome edge; do
+            source_dir=".output/${browser}-mv3"
+            test -f "${source_dir}/manifest.json"
+            node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(m.version!==require('./package.json').version || m.manifest_version!==3) process.exit(1)" "$source_dir/manifest.json"
+            archive="B2Y-Fix-${GITHUB_REF_NAME}-${browser}-mv3.zip"
+            (cd "$source_dir" && zip -qr "${GITHUB_WORKSPACE}/dist/$archive" .)
+            unzip -tq "dist/$archive"
+          done
 
-                  # 构建 Firefox 版本  
-                  echo "🔨 构建 Firefox 扩展..."
-                  npm run build:firefox
-
-                  # 打包 Firefox 版本
-                  cd .output/firefox-mv2
-                  zip -r "../../$FIREFOX_PACKAGE" .
-                  cd ../..
-
-                  # 构建 Edge 版本
-                  echo "🔨 构建 Edge 扩展..."
-                  npm run build:edge
-
-                  # 打包 Edge 版本
-                  cd .output/edge-mv3
-                  zip -r "../../$EDGE_PACKAGE" .
-                  cd ../..
-
-                  # 构建 Safari 版本
-                  echo "🔨 构建 Safari 扩展..."
-                  npm run build:safari
-
-                  # 打包 Safari 版本
-                  cd .output/safari-mv2
-                  zip -r "../../$SAFARI_PACKAGE" .
-                  cd ../..
-
-                  echo "✅ 扩展包创建完成:"
-                  echo "📦 Chrome: $CHROME_PACKAGE"
-                  echo "📦 Firefox: $FIREFOX_PACKAGE"
-                  echo "📦 Edge: $EDGE_PACKAGE"
-                  echo "📦 Safari: $SAFARI_PACKAGE"
-
-                  echo "chrome_package=$CHROME_PACKAGE" >> $GITHUB_ENV
-                  echo "firefox_package=$FIREFOX_PACKAGE" >> $GITHUB_ENV
-                  echo "edge_package=$EDGE_PACKAGE" >> $GITHUB_ENV
-                  echo "safari_package=$SAFARI_PACKAGE" >> $GITHUB_ENV
-
-            - name: 创建 Release
-              if: steps.check_release.outputs.exists == 'false'
-              run: |
-                  VERSION=${{ steps.get_version.outputs.version }}
-                  CHROME_PACKAGE="${{ env.chrome_package }}"
-                  FIREFOX_PACKAGE="${{ env.firefox_package }}"
-                  EDGE_PACKAGE="${{ env.edge_package }}"
-                  SAFARI_PACKAGE="${{ env.safari_package }}"
-
-                  # 创建 Release 并上传多浏览器包
-                  gh release create "v$VERSION" \
-                    --title "v$VERSION" \
-                    --generate-notes \
-                    "$CHROME_PACKAGE" \
-                    "$FIREFOX_PACKAGE" \
-                    "$EDGE_PACKAGE" \
-                    "$SAFARI_PACKAGE"
-                    
-                  echo "✅ Release v$VERSION 创建成功，包含 Chrome、Firefox、Edge 和 Safari 版本"
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: 输出结果
-              if: steps.check_release.outputs.exists == 'false'
-              run: |
-                  VERSION=${{ steps.get_version.outputs.version }}
-                  echo "🎉 多浏览器扩展 v$VERSION 已成功构建并发布到 Release!"
-                  echo "🌐 支持浏览器:"
-                  echo "  ✅ Chrome (Manifest V3)"
-                  echo "  ✅ Firefox (Manifest V2)"
-                  echo "  ✅ Edge (Manifest V3)" 
-                  echo "  ✅ Safari (Manifest V3)"
-                  echo "🛠 构建技术: WXT Framework"
-                  echo "📁 构建产物: .output/chrome-mv3/, .output/firefox-mv2/, .output/edge-mv3/, .output/safari-mv2/"
-
-            - name: 跳过发布提示
-              if: steps.check_release.outputs.exists == 'true'
-              run: |
-                  VERSION=${{ steps.get_version.outputs.version }}
-                  echo "ℹ️  版本 v$VERSION 的 Release 已存在，本次跳过发布"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --title "B2Y Fix $GITHUB_REF_NAME" --notes-file .github/release-notes.md
