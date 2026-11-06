@@ -18,12 +18,13 @@
     padding: 2px 0;
     white-space: nowrap;
     font-weight: bold;
+    /* Bilibili-style thin outline: four 1px offsets with a 1px blur. The previous diagonal
+       offsets plus a 2px halo overlapped the glyphs and made colours look grey. */
     text-shadow:
-        -1px -1px 0 #000,
-        1px -1px 0 #000,
-        -1px 1px 0 #000,
-        1px 1px 0 #000,
-        0 0 2px #000;
+        1px 0 1px #000,
+        0 1px 1px #000,
+        0 -1px 1px #000,
+        -1px 0 1px #000;
     pointer-events: none;
     opacity: var(--danmaku-opacity, 1);
     will-change: transform;

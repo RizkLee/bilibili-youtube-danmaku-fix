@@ -1,3 +1,8 @@
+### v2.1.1 更新
+
+- 修复弹幕文字发灰：描边改为与 B 站相同的细描边（四向 1px），去掉压在字形上的斜向阴影和 2px 光晕，彩色弹幕更鲜亮。
+- 深色弹幕（如黑字）改用浅色描边，避免融进黑色描边里看不清。
+
 这是 [RizkLee/bilibili-youtube-danmaku-fix](https://github.com/RizkLee/bilibili-youtube-danmaku-fix) 的独立修改版，保留原版 B2Y 功能并增加：
 
 - 改进 B 站番剧（`ep` / `ss`）弹幕获取，支持从整季链接选择集数。

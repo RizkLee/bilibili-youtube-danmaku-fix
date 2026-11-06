@@ -27,8 +27,8 @@ YouTube 的自动匹配可使用**新版标题搜索**，也可在面板中切�
 
 | 浏览器 | 下载文件 |
 | --- | --- |
-| Chrome | `B2Y-Fix-v2.1.0-chrome-mv3.zip` |
-| Microsoft Edge | `B2Y-Fix-v2.1.0-edge-mv3.zip` |
+| Chrome | `B2Y-Fix-v2.1.1-chrome-mv3.zip` |
+| Microsoft Edge | `B2Y-Fix-v2.1.1-edge-mv3.zip` |
 
 文件名会随版本更新；以后下载新版时，选择文件名中含 `chrome-mv3` 或 `edge-mv3` 的 ZIP 即可。**不要误下 GitHub 自动生成的 Source code ZIP**，那是源码，不是现成的扩展程序。
 

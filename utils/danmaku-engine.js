@@ -1,5 +1,22 @@
 import { normalizeTimelineRate, toDanmakuTime } from './timeline.js';
 
+// Dark danmaku (e.g. black text) would vanish inside a black outline; use a light one instead.
+const DARK_OUTLINE = '1px 0 1px #fff, 0 1px 1px #fff, 0 -1px 1px #fff, -1px 0 1px #fff';
+
+export function isDarkColor(color) {
+    const match = /^#?([0-9a-f]{6})$/i.exec(String(color || '').trim());
+    if (!match) return false;
+    const value = parseInt(match[1], 16);
+    const r = (value >> 16) & 0xff;
+    const g = (value >> 8) & 0xff;
+    const b = value & 0xff;
+    return r * 299 + g * 587 + b * 114 < 48000;
+}
+
+function applyOutline(elem, color) {
+    if (isDarkColor(color)) elem.style.textShadow = DARK_OUTLINE;
+}
+
 class DanmakuEngine {
     constructor(container) {
         this.container = container;
@@ -554,6 +571,7 @@ class DanmakuEngine {
         const elem = document.createElement('div');
         elem.textContent = danmaku.text;
         elem.style.color = danmaku.color || '#ffffff';
+        applyOutline(elem, danmaku.color);
         elem.style.position = 'absolute';
         elem.style.whiteSpace = 'nowrap';
         elem.style.pointerEvents = 'none';
@@ -625,6 +643,7 @@ class DanmakuEngine {
         const elem = document.createElement('div');
         elem.textContent = danmaku.text;
         elem.style.color = danmaku.color || '#ffffff';
+        applyOutline(elem, danmaku.color);
         elem.style.position = 'absolute';
         elem.style.whiteSpace = 'nowrap';
         elem.style.pointerEvents = 'none';
