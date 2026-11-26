@@ -5,18 +5,15 @@ import { normalizeTimelineRate, toDanmakuTime } from './timeline.js';
  *
  * - Comments are emitted from a sorted list with a moving pointer on every animation frame,
  *   so they appear exactly at their time (no early emission, no O(n) scans).
- * - Font size follows the player height ("scaleWithPlayer"), so text keeps the same size
- *   relative to the picture in the normal player, theatre mode and fullscreen.
+ * - Text has the same pixel size in the normal player, theatre mode and fullscreen (like the
+ *   Bilibili web player); a larger player simply gets more lanes.
  * - On every size change the visible comments are rebuilt at their current progress, so
- *   entering or leaving fullscreen never leaves comments with the old size or travel path.
+ *   entering or leaving fullscreen never leaves comments with the old travel path.
  * - Lanes are chosen like the Bilibili player: top-most lane where the new comment neither
  *   overlaps nor catches up with the previous one; comments that do not fit are dropped.
  * - Top and bottom comments are shown fixed and centred for four seconds.
  */
 
-const REFERENCE_PLAYER_HEIGHT = 720;
-const MIN_SCALE = 0.75;
-const MAX_SCALE = 2;
 const SCROLL_DURATION_MS = 8000;
 const FIXED_DURATION_MS = 4000;
 const LANE_GAP_PX = 24;
@@ -35,10 +32,10 @@ export function isDarkColor(color) {
     return r * 299 + g * 587 + b * 114 < 48000;
 }
 
-/** Player-height based font scale, clamped so tiny or huge players stay readable. */
-export function playerScale(height, enabled = true) {
-    if (!enabled || !Number.isFinite(height) || height <= 0) return 1;
-    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, height / REFERENCE_PLAYER_HEIGHT));
+/** Font size in CSS pixels; independent of the player size so fullscreen looks the same. */
+export function fontPixels(fontSize) {
+    const size = Number(fontSize);
+    return Math.round(Math.min(96, Math.max(10, Number.isFinite(size) ? size : 24)));
 }
 
 /** Normalised display mode: 'rtl' scrolling, 'top' / 'bottom' fixed, or null for unsupported. */
@@ -100,8 +97,7 @@ class DanmakuEngine {
             speed: 1.0,
             trackSpacing: 8,
             displayAreaPercentage: 100,
-            weightThreshold: 0,
-            scaleWithPlayer: true
+            weightThreshold: 0
         };
         this.video = null;
         this.isStarted = false;
@@ -109,7 +105,7 @@ class DanmakuEngine {
         this.lastDanmakuTime = null;
         this.frameId = null;
         this.resizeTimer = null;
-        this.layout = { width: 0, height: 0, fontPx: 24, laneHeight: 32, scale: 1 };
+        this.layout = { width: 0, height: 0, fontPx: 24, laneHeight: 32 };
         this.measureContext = null;
         this.listeners = [];
         this.fullscreenChangeHandler = null;
@@ -155,9 +151,8 @@ class DanmakuEngine {
     computeLayout() {
         const width = this.container.offsetWidth || this.stage.offsetWidth || 0;
         const height = this.container.offsetHeight || this.stage.offsetHeight || 0;
-        const scale = playerScale(height, this.settings.scaleWithPlayer !== false);
-        const fontPx = Math.round(Math.max(10, Number(this.settings.fontSize) || 24) * scale);
-        const spacing = Math.max(0, Number(this.settings.trackSpacing) || 0) * scale;
+        const fontPx = fontPixels(this.settings.fontSize);
+        const spacing = Math.max(0, Number(this.settings.trackSpacing) || 0);
         const laneHeight = Math.max(1, Math.round(fontPx * 1.15 + spacing));
         const area = Math.min(100, Math.max(5, Number(this.settings.displayAreaPercentage) || 100));
         const usable = (height * area) / 100;
@@ -171,7 +166,7 @@ class DanmakuEngine {
             previous.fontPx !== fontPx ||
             previous.laneHeight !== laneHeight ||
             this.tracks.length !== laneCount;
-        this.layout = { width, height, fontPx, laneHeight, scale };
+        this.layout = { width, height, fontPx, laneHeight };
         this.stage.style.setProperty('--danmaku-font-size', `${fontPx}px`);
         this.stage.style.setProperty('--danmaku-line-height', `${laneHeight}px`);
 
@@ -236,8 +231,7 @@ class DanmakuEngine {
         const geometryChanged =
             old.fontSize !== this.settings.fontSize ||
             old.trackSpacing !== this.settings.trackSpacing ||
-            old.displayAreaPercentage !== this.settings.displayAreaPercentage ||
-            old.scaleWithPlayer !== this.settings.scaleWithPlayer;
+            old.displayAreaPercentage !== this.settings.displayAreaPercentage;
         const timingChanged =
             old.enabled !== this.settings.enabled ||
             old.speed !== this.settings.speed ||

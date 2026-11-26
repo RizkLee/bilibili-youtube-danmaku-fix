@@ -138,6 +138,16 @@
                     <input type="checkbox" id="quark-enable-danmaku" checked />
                     <span class="toggle-slider" aria-hidden="true"></span>
                 </label>
+                <div class="divider"></div>
+                <label class="toggle row row-master">
+                    <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
+                    <span class="row-text">
+                        <span class="row-title toggle-label">按标题自动匹配</span>
+                        <span class="row-detail">开启后用视频标题在 B 站搜索并自动下载；关闭后不会发送标题</span>
+                    </span>
+                    <input type="checkbox" id="quark-auto-download" />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
             </section>
 
             <div class="quick-actions cols-3">
@@ -178,15 +188,6 @@
                     <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
                 </summary>
                 <div class="card list-card">
-                    <label class="toggle row">
-                        <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
-                        <span class="row-text">
-                            <span class="row-title toggle-label">按标题自动匹配</span>
-                            <span class="row-detail">匹配度达标时自动下载弹幕；关闭后在页面面板中手动选择</span>
-                        </span>
-                        <input type="checkbox" id="quark-auto-download" />
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </label>
 
                     <div class="row row-stack control-group" id="quark-match-threshold-group" style="display: none">
                         <div class="row-head">
@@ -277,7 +278,7 @@
                             <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-type" /></svg></span>
                             <span class="row-text">
                                 <label class="row-title" for="quark-font-size">字号</label>
-                                <span class="row-detail">以 720p 高度的标准播放器为基准</span>
+                                
                             </span>
                             <span class="value-chip" id="quark-font-size-value">24px</span>
                         </div>
@@ -331,15 +332,6 @@
                         <input type="range" id="quark-filter-level" min="0" max="10" value="0" step="1" />
                     </div>
 
-                    <label class="toggle row">
-                        <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-expand" /></svg></span>
-                        <span class="row-text">
-                            <span class="row-title toggle-label">随播放器缩放</span>
-                            <span class="row-detail">全屏与小窗下弹幕相对画面大小保持一致</span>
-                        </span>
-                        <input type="checkbox" id="quark-scale-with-player" checked />
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </label>
                 </div>
             </details>
 
@@ -443,6 +435,16 @@
                     <input type="checkbox" id="enable-danmaku" checked />
                     <span class="toggle-slider" aria-hidden="true"></span>
                 </label>
+                <div class="divider"></div>
+                <label class="toggle row row-master">
+                    <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
+                    <span class="row-text">
+                        <span class="row-title toggle-label">按标题自动匹配</span>
+                        <span class="row-detail">关闭后不会把视频标题发送到 B 站搜索，可手动搜索或粘贴链接</span>
+                    </span>
+                    <input type="checkbox" id="auto-match-title" checked />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
             </section>
 
             <div class="quick-actions">
@@ -508,15 +510,6 @@
                     <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
                 </summary>
                 <div class="card list-card">
-                    <label class="toggle row">
-                        <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
-                        <span class="row-text">
-                            <span class="row-title toggle-label">按标题自动匹配</span>
-                            <span class="row-detail">关闭后不会把视频标题发送到 B 站搜索；可手动搜索或粘贴链接</span>
-                        </span>
-                        <input type="checkbox" id="auto-match-title" checked />
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </label>
 
                     <div class="row row-stack control-group" id="youtube-match-mode-group">
                         <div class="row-head">
@@ -649,7 +642,7 @@
                             <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-type" /></svg></span>
                             <span class="row-text">
                                 <label class="row-title" for="font-size">字号</label>
-                                <span class="row-detail">以 720p 高度的标准播放器为基准</span>
+                                
                             </span>
                             <span class="value-chip" id="font-size-value">24px</span>
                         </div>
@@ -703,15 +696,6 @@
                         <input type="range" id="weight-threshold" min="0" max="10" value="5" step="1" />
                     </div>
 
-                    <label class="toggle row">
-                        <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-expand" /></svg></span>
-                        <span class="row-text">
-                            <span class="row-title toggle-label">随播放器缩放</span>
-                            <span class="row-detail">全屏与小窗下弹幕相对画面大小保持一致</span>
-                        </span>
-                        <input type="checkbox" id="scale-with-player" checked />
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </label>
                 </div>
             </details>
 

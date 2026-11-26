@@ -1,22 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { displayMode, isDarkColor, laneAccepts, lowerBound, playerScale } from '../utils/danmaku-engine.js';
+import { displayMode, fontPixels, isDarkColor, laneAccepts, lowerBound } from '../utils/danmaku-engine.js';
 
-test('font scale follows the player height and stays within readable bounds', () => {
-    assert.equal(playerScale(720), 1);
-    assert.equal(playerScale(1080), 1.5);
-    assert.equal(playerScale(200), 0.75);
-    assert.equal(playerScale(4000), 2);
-    assert.equal(playerScale(1080, false), 1);
-    assert.equal(playerScale(0), 1);
-});
-
-test('fullscreen keeps the same text size relative to the picture', () => {
-    const base = 24;
-    const small = base * playerScale(540);
-    const full = base * playerScale(1080);
-    assert.equal(full / 1080, small / 540);
+test('font size does not depend on the player size', () => {
+    assert.equal(fontPixels(24), 24);
+    assert.equal(fontPixels('30'), 30);
+    assert.equal(fontPixels(undefined), 24);
+    assert.equal(fontPixels(2), 10);
 });
 
 test('display modes map Bilibili modes and skip advanced comments', () => {

@@ -728,8 +728,7 @@ async function saveSettings() {
         youtubeMatchThreshold:
             parseInt(document.getElementById('youtube-match-threshold')?.value) || 90,
         youtubeMultiMatchMode: getYouTubeMultiMatchMode(),
-        autoMatchByTitle: document.getElementById('auto-match-title')?.checked ?? true,
-        scaleWithPlayer: document.getElementById('scale-with-player')?.checked ?? true
+        autoMatchByTitle: document.getElementById('auto-match-title')?.checked ?? true
     };
 
     await browser.storage.local.set({ danmakuSettings: settings });
@@ -760,8 +759,7 @@ async function loadSettings() {
         youtubeMatchMode: 'autoDownload',
         youtubeMatchThreshold: 90,
         youtubeMultiMatchMode: 'mostDanmaku',
-        autoMatchByTitle: true,
-        scaleWithPlayer: true
+        autoMatchByTitle: true
     };
     const settings = {
         ...defaultSettings,
@@ -771,8 +769,6 @@ async function loadSettings() {
     document.getElementById('enable-danmaku').checked = settings.enabled;
     const autoMatchEl = document.getElementById('auto-match-title');
     if (autoMatchEl) autoMatchEl.checked = settings.autoMatchByTitle !== false;
-    const scaleEl = document.getElementById('scale-with-player');
-    if (scaleEl) scaleEl.checked = settings.scaleWithPlayer !== false;
     document.getElementById('time-offset').value = settings.timeOffset;
     setTimelineRateUI('', settings.timelineRate);
 
@@ -2639,8 +2635,7 @@ function bindQuarkUIEvents() {
         'quark-speed',
         'quark-track-spacing',
         'quark-filter-level',
-        'quark-match-threshold',
-        'quark-scale-with-player'
+        'quark-match-threshold'
     ];
     settingIds.forEach((id) => {
         const el = document.getElementById(id);
@@ -2797,8 +2792,7 @@ async function saveQuarkSettings() {
         weightThreshold: parseInt(document.getElementById('quark-filter-level')?.value) || 0,
         autoDownload: document.getElementById('quark-auto-download')?.checked ?? false,
         matchThreshold: parseInt(document.getElementById('quark-match-threshold')?.value) || 90,
-        multiMatchMode: multiMatchMode,
-        scaleWithPlayer: document.getElementById('quark-scale-with-player')?.checked ?? true
+        multiMatchMode: multiMatchMode
     };
 
     await browser.storage.local.set({ danmakuSettings: settings });
@@ -2828,16 +2822,12 @@ async function loadQuarkSettings() {
         weightThreshold: 0,
         autoDownload: false,
         matchThreshold: 90,
-        multiMatchMode: 'mostDanmaku',
-        scaleWithPlayer: true
+        multiMatchMode: 'mostDanmaku'
     };
     const settings = {
         ...defaultSettings,
         ...(result.danmakuSettings || {})
     };
-
-    const scaleEl = document.getElementById('quark-scale-with-player');
-    if (scaleEl) scaleEl.checked = settings.scaleWithPlayer !== false;
     const enableEl = document.getElementById('quark-enable-danmaku');
     const opacityEl = document.getElementById('quark-opacity');
     const fontSizeEl = document.getElementById('quark-font-size');
@@ -3340,7 +3330,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindTimelineRateUI('', saveSettings);
     attachToggleAnimationHandlers(document.getElementById('enable-danmaku'));
     attachToggleAnimationHandlers(document.getElementById('auto-match-title'));
-    attachToggleAnimationHandlers(document.getElementById('scale-with-player'));
     await checkCurrentPageDanmaku();
 
     // 获取并显示页面信息
@@ -3374,7 +3363,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateAutoMatchControls();
         saveSettings();
     });
-    document.getElementById('scale-with-player')?.addEventListener('change', saveSettings);
     document.getElementById('youtube-match-threshold').addEventListener('input', () => {
         updateSliderValues();
         saveSettings();
