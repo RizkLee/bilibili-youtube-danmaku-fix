@@ -1,5 +1,27 @@
 import { normalizeTimelineRate, toDanmakuTime } from './timeline.js';
 
+/*
+ * Danmaku renderer shared by the YouTube and Quark content scripts.
+ *
+ * - Comments are emitted from a sorted list with a moving pointer on every animation frame,
+ *   so they appear exactly at their time (no early emission, no O(n) scans).
+ * - Font size follows the player height ("scaleWithPlayer"), so text keeps the same size
+ *   relative to the picture in the normal player, theatre mode and fullscreen.
+ * - On every size change the visible comments are rebuilt at their current progress, so
+ *   entering or leaving fullscreen never leaves comments with the old size or travel path.
+ * - Lanes are chosen like the Bilibili player: top-most lane where the new comment neither
+ *   overlaps nor catches up with the previous one; comments that do not fit are dropped.
+ * - Top and bottom comments are shown fixed and centred for four seconds.
+ */
+
+const REFERENCE_PLAYER_HEIGHT = 720;
+const MIN_SCALE = 0.75;
+const MAX_SCALE = 2;
+const SCROLL_DURATION_MS = 8000;
+const FIXED_DURATION_MS = 4000;
+const LANE_GAP_PX = 24;
+const FONT_FAMILY = 'SimHei, "Microsoft YaHei", "PingFang SC", Arial, sans-serif';
+
 // Dark danmaku (e.g. black text) would vanish inside a black outline; use a light one instead.
 const DARK_OUTLINE = '1px 0 1px #fff, 0 1px 1px #fff, 0 -1px 1px #fff, -1px 0 1px #fff';
 
@@ -13,8 +35,51 @@ export function isDarkColor(color) {
     return r * 299 + g * 587 + b * 114 < 48000;
 }
 
-function applyOutline(elem, color) {
-    if (isDarkColor(color)) elem.style.textShadow = DARK_OUTLINE;
+/** Player-height based font scale, clamped so tiny or huge players stay readable. */
+export function playerScale(height, enabled = true) {
+    if (!enabled || !Number.isFinite(height) || height <= 0) return 1;
+    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, height / REFERENCE_PLAYER_HEIGHT));
+}
+
+/** Normalised display mode: 'rtl' scrolling, 'top' / 'bottom' fixed, or null for unsupported. */
+export function displayMode(danmaku) {
+    const mode = danmaku?.mode;
+    if (mode === 'bottom' || mode === 4) return 'bottom';
+    if (mode === 'top' || mode === 5) {
+        // Older caches mapped advanced (mode 7) comments to 'top'; their text is a JSON array.
+        const text = String(danmaku.text || '').trim();
+        if (text.startsWith('[') && text.endsWith(']') && text.includes('"')) return null;
+        return 'top';
+    }
+    if (mode === 'special' || mode === 7 || mode === 8 || mode === 9) return null;
+    return 'rtl';
+}
+
+/**
+ * Whether a new scrolling comment may enter a lane whose last comment has the given state.
+ * All times are in ms of animation time; widths in px.
+ */
+export function laneAccepts(stageWidth, previous, nextWidth, nextProgress, nextDuration, gap = LANE_GAP_PX) {
+    if (!previous) return true;
+    const { width, progress, duration } = previous;
+    // The previous comment's tail must already be inside the stage, plus a gap.
+    if (((stageWidth + width) * progress) / duration < width + gap) return false;
+    // The new comment (longer text moves faster) must not catch up before the previous leaves.
+    const previousLeavesIn = duration - progress;
+    const nextReachesLeftIn = (nextDuration * stageWidth) / (stageWidth + nextWidth) - nextProgress;
+    return nextReachesLeftIn >= previousLeavesIn;
+}
+
+/** Index of the first comment with time >= value in a list sorted by time. */
+export function lowerBound(list, value) {
+    let low = 0;
+    let high = list.length;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (list[mid].time < value) low = mid + 1;
+        else high = mid;
+    }
+    return low;
 }
 
 class DanmakuEngine {
@@ -22,802 +87,365 @@ class DanmakuEngine {
         this.container = container;
         this.stage = null;
         this.danmakus = [];
-        this.tracks = [];
+        this.tracks = []; // Scrolling lanes; kept for compatibility with callers.
+        this.topLanes = [];
+        this.bottomLanes = [];
+        this.items = new Set();
         this.settings = {
             enabled: true,
             timeOffset: 0,
             timelineRate: 1,
             opacity: 100,
             fontSize: 24,
-            speed: 1.0, // 添加速度控制
-            trackSpacing: 8, // 轨道间距
-            displayAreaPercentage: 100, // 显示区域百分比
-            weightThreshold: 0 // 弹幕权重阈值
+            speed: 1.0,
+            trackSpacing: 8,
+            displayAreaPercentage: 100,
+            weightThreshold: 0,
+            scaleWithPlayer: true
         };
         this.video = null;
         this.isStarted = false;
+        this.pointer = 0;
+        this.lastDanmakuTime = null;
+        this.frameId = null;
+        this.resizeTimer = null;
+        this.layout = { width: 0, height: 0, fontPx: 24, laneHeight: 32, scale: 1 };
+        this.measureContext = null;
+        this.listeners = [];
         this.fullscreenChangeHandler = null;
-
-        // seeking/seeked 配对过滤
-        this.lastVideoTime = 0;
-        this.seekingThreshold = 0.5; // 时间变化阈值（秒）
-        this.isRealSeeking = false; // 标记是否为真正的拖拽
-
         this.init();
     }
 
     init() {
-        // 创建弹幕舞台
         this.stage = document.createElement('div');
         this.stage.className = 'bilibili-danmaku-stage';
         this.container.appendChild(this.stage);
 
-        // 查找视频元素
-        this.video = document.querySelector('video');
-        if (this.video) {
-            this.bindVideoEvents();
-        }
+        this.video = this.container.querySelector('video') || document.querySelector('video');
+        if (this.video) this.bindVideoEvents();
 
-        // 初始化轨道
-        this.initTracks();
-
-        // 监听容器尺寸变化
+        this.computeLayout();
         this.observeResize();
     }
 
+    // ------------------------------------------------------------------ layout
+
     observeResize() {
-        // 使用 ResizeObserver 监听容器尺寸变化
         if (window.ResizeObserver) {
-            this.resizeObserver = new ResizeObserver(() => {
-                this.updateStageSize();
-                this.initTracks();
-            });
+            this.resizeObserver = new ResizeObserver(() => this.scheduleRelayout());
             this.resizeObserver.observe(this.container);
-
-            // 同时监听视频元素
-            if (this.video) {
-                this.resizeObserver.observe(this.video);
-            }
+            if (this.video) this.resizeObserver.observe(this.video);
         }
-
-        // 同时监听全屏变化
-        this.fullscreenChangeHandler = () => this.handleFullscreenChange();
+        this.fullscreenChangeHandler = () => this.scheduleRelayout(120);
         document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
         document.addEventListener('webkitfullscreenchange', this.fullscreenChangeHandler);
     }
 
-    updateStageSize() {
-        // 确保弹幕舞台覆盖整个容器
-        if (this.stage && this.container) {
-            const rect = this.container.getBoundingClientRect();
-            console.log(
-                '弹幕容器:',
-                this.container.className,
-                '尺寸:',
-                rect.width,
-                'x',
-                rect.height
-            );
-
-            // 调试模式：显示边框
-            if (window.location.hash === '#debug-danmaku') {
-                this.stage.style.border = '2px solid red';
-                this.stage.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
-            }
-        }
+    scheduleRelayout(delay = 80) {
+        clearTimeout(this.resizeTimer);
+        this.resizeTimer = setTimeout(() => this.initTracks(), delay);
     }
 
-    handleFullscreenChange() {
-        setTimeout(() => {
-            console.log('全屏状态变化 - 流畅转换弹幕');
-            this.updateStageSize();
-            this.initTracks();
-        }, 100);
-    }
-
+    /** Recompute sizes and lanes; rebuild visible comments if anything changed. */
     initTracks() {
-        // 保存现有弹幕items
-        const existingItems = [];
-        if (this.tracks && this.tracks.length > 0) {
-            this.tracks.forEach((track) => {
-                existingItems.push(...track.items);
-            });
-        }
-
-        const stageHeight = this.container.offsetHeight;
-        const usableHeight = stageHeight * (this.settings.displayAreaPercentage / 100);
-        const trackHeight = this.settings.fontSize + this.settings.trackSpacing;
-        const trackCount = Math.floor(usableHeight / trackHeight);
-
-        console.log('初始化弹幕轨道:', {
-            容器高度: stageHeight,
-            可用高度: usableHeight,
-            显示区域: this.settings.displayAreaPercentage + '%',
-            轨道高度: trackHeight,
-            轨道数量: trackCount,
-            现有弹幕数量: existingItems.length
-        });
-
-        // 重新创建轨道
-        this.tracks = [];
-        for (let i = 0; i < trackCount; i++) {
-            this.tracks.push({
-                top: i * trackHeight,
-                items: []
-            });
-        }
-
-        // 将现有弹幕重新分配到新轨道中
-        existingItems.forEach((item) => {
-            this.redistributeItemToNewTrack(item, trackHeight);
-        });
+        const changed = this.computeLayout();
+        if (changed && this.settings.enabled && this.danmakus.length) this.resyncDanmakus();
     }
 
-    redistributeItemToNewTrack(item, trackHeight) {
-        if (!item.elem) return;
+    computeLayout() {
+        const width = this.container.offsetWidth || this.stage.offsetWidth || 0;
+        const height = this.container.offsetHeight || this.stage.offsetHeight || 0;
+        const scale = playerScale(height, this.settings.scaleWithPlayer !== false);
+        const fontPx = Math.round(Math.max(10, Number(this.settings.fontSize) || 24) * scale);
+        const spacing = Math.max(0, Number(this.settings.trackSpacing) || 0) * scale;
+        const laneHeight = Math.max(1, Math.round(fontPx * 1.15 + spacing));
+        const area = Math.min(100, Math.max(5, Number(this.settings.displayAreaPercentage) || 100));
+        const usable = (height * area) / 100;
+        const laneCount = Math.max(1, Math.floor(usable / laneHeight));
+        const fixedCount = Math.max(1, Math.floor((height * 0.5) / laneHeight));
 
-        // 获取弹幕当前的top位置
-        const currentTop = parseInt(item.elem.style.top) || 0;
+        const previous = this.layout;
+        const changed =
+            previous.width !== width ||
+            previous.height !== height ||
+            previous.fontPx !== fontPx ||
+            previous.laneHeight !== laneHeight ||
+            this.tracks.length !== laneCount;
+        this.layout = { width, height, fontPx, laneHeight, scale };
+        this.stage.style.setProperty('--danmaku-font-size', `${fontPx}px`);
+        this.stage.style.setProperty('--danmaku-line-height', `${laneHeight}px`);
 
-        // 计算应该分配到哪个新轨道
-        const trackIndex = Math.floor(currentTop / trackHeight);
-
-        // 检查轨道索引是否在可用范围内
-        if (trackIndex >= this.tracks.length) {
-            // 如果超出了可用轨道范围，移除这个弹幕
-            item.elem.remove();
-            console.log(`弹幕超出显示区域，已移除: ${currentTop}px`);
-            return;
+        if (changed || !this.tracks.length) {
+            this.tracks = Array.from({ length: laneCount }, (_, i) => ({ top: i * laneHeight, items: [] }));
+            this.topLanes = Array.from({ length: fixedCount }, () => null);
+            this.bottomLanes = Array.from({ length: fixedCount }, () => null);
+            for (const item of this.items) this.removeItem(item, false);
+            this.items.clear();
         }
+        return changed;
+    }
 
-        const targetTrack = this.tracks[trackIndex] || this.tracks[0];
+    measure(text) {
+        if (!this.measureContext) {
+            this.measureContext = document.createElement('canvas').getContext('2d');
+        }
+        this.measureContext.font = `bold ${this.layout.fontPx}px ${FONT_FAMILY}`;
+        // Outline adds about 1px on each side.
+        return Math.ceil(this.measureContext.measureText(text).width) + 2;
+    }
 
-        // 更新弹幕元素的top位置到新轨道
-        item.elem.style.top = targetTrack.top + 'px';
+    // ------------------------------------------------------------------ video events
 
-        // 将item添加到新轨道
-        targetTrack.items.push(item);
-
-        console.log(`弹幕重新分配: 从${currentTop}px → 轨道${trackIndex} (${targetTrack.top}px)`);
+    on(target, type, handler) {
+        target.addEventListener(type, handler);
+        this.listeners.push(() => target.removeEventListener(type, handler));
     }
 
     bindVideoEvents() {
-        // 初始化视频时间跟踪
-        this.lastVideoTime = this.video.currentTime;
-        this.pauseTime = 0;
-
-        this.video.addEventListener('play', () => {
-            this.start();
-            // console.log('视频播放');
-        });
-        this.video.addEventListener('pause', () => {
-            this.pause();
-            this.pauseTime = this.video.currentTime;
-            console.log('视频暂停');
-        });
-        this.video.addEventListener('seeking', () => {
-            const currentTime = this.video.currentTime;
-            let timeDiff = 0;
-            if (this.pauseTime > 0) {
-                timeDiff = Math.abs(currentTime - this.pauseTime);
-            } else {
-                timeDiff = Math.abs(currentTime - this.lastVideoTime);
-            }
-            console.log('时间差', timeDiff);
-
-            if (timeDiff > this.seekingThreshold) {
-                // 真正的拖拽
-                console.log('真正的拖拽 - 清空弹幕', `时间差: ${timeDiff.toFixed(2)}s`);
-                this.isRealSeeking = true;
-                this.clear();
-                this.resetDanmakuStates();
-                this.isStarted = false;
-            } else {
-                // YouTube内部微调
-                console.log('YouTube内部微调 - 忽略seeking', `时间差: ${timeDiff.toFixed(2)}s`);
-                this.isRealSeeking = false;
-            }
-
-            this.lastVideoTime = currentTime;
-        });
-        this.video.addEventListener('seeked', () => {
-            if (this.isRealSeeking) {
-                // 只有真正拖拽的seeked才处理
-                console.log('真正拖拽结束 - 重新同步弹幕');
-                this.resyncDanmakus();
-                if (!this.video.paused) {
-                    this.start();
-                }
-            } else {
-                console.log('忽略配对的seeked事件');
-            }
-
-            // 重置标记
-            this.isRealSeeking = false;
-        });
-
-        // 监听播放速度变化
-        this.video.addEventListener('ratechange', () => {
-            this.handleSpeedChange(this.video.playbackRate);
-        });
+        this.on(this.video, 'play', () => this.start());
+        this.on(this.video, 'playing', () => this.start());
+        this.on(this.video, 'pause', () => this.pause());
+        this.on(this.video, 'seeked', () => this.resyncDanmakus());
+        this.on(this.video, 'ratechange', () => this.handleSpeedChange(this.video.playbackRate));
     }
 
-    loadDanmakus(danmakus) {
-        // 重置所有弹幕的发射状态
-        this.danmakus = danmakus
-            .map((d) => ({ ...d, emitted: false }))
-            .sort((a, b) => a.time - b.time);
-        this.clear();
+    // ------------------------------------------------------------------ data and settings
 
-        // 如果视频正在播放，重新同步弹幕
-        if (this.video && !this.video.paused) {
-            // 延迟一点再同步，确保DOM更新完成
-            setTimeout(() => {
-                this.resyncDanmakus();
-                this.startEmitting();
-            }, 100);
-        }
+    loadDanmakus(danmakus) {
+        this.danmakus = (danmakus || [])
+            .filter((d) => d && Number.isFinite(Number(d.time)) && d.text)
+            .map((d) => ({ ...d, time: Number(d.time) }))
+            .sort((a, b) => a.time - b.time);
+        this.resyncDanmakus();
+        if (this.video && !this.video.paused) this.start();
     }
 
     updateSettings(settings) {
-        const oldSettings = { ...this.settings };
+        const old = { ...this.settings };
         this.settings = { ...this.settings, ...settings };
         this.settings.timelineRate = normalizeTimelineRate(this.settings.timelineRate);
+        const opacity = Number(this.settings.opacity);
+        this.stage.style.opacity = String(Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity / 100)) : 1);
 
-        // 更新CSS变量
-        this.stage.style.setProperty('--danmaku-font-size', `${this.settings.fontSize}px`);
-        this.stage.style.setProperty('--danmaku-opacity', this.settings.opacity / 100);
-
-        // 检查速度设置变化
-        if (oldSettings.speed !== this.settings.speed) {
-            console.log(`弹幕速度变化: ${oldSettings.speed} → ${this.settings.speed}`);
-            this.updateAnimationSpeeds();
-        }
-
-        // 重新初始化轨道
-        this.initTracks();
-
-        // 如果禁用弹幕，清空舞台
         if (!this.settings.enabled) {
             this.clear();
             this.pause();
-        } else {
-            // 检查weight阈值是否发生变化
-            if (oldSettings.weightThreshold !== this.settings.weightThreshold ||
-                oldSettings.timelineRate !== this.settings.timelineRate ||
-                oldSettings.timeOffset !== this.settings.timeOffset) {
-                console.log(
-                    `Weight阈值变化: ${oldSettings.weightThreshold} → ${this.settings.weightThreshold}`
-                );
-                // 异步重建弹幕，避免卡顿
-                this.rebuildDanmakusAsync();
-            } else if (this.video && !this.video.paused) {
-                this.start();
-            }
-        }
-    }
-
-    // 更新所有动画的速度
-    updateAnimationSpeeds() {
-        this.tracks.forEach((track) => {
-            track.items.forEach((item) => {
-                if (item.animation) {
-                    // 计算新的duration
-                    const newDuration = item.baseDuration / this.settings.speed;
-
-                    // 获取当前进度
-                    const currentTime = item.animation.currentTime || 0;
-                    const oldDuration = item.animation.effect.getTiming().duration;
-                    const progress = currentTime / oldDuration;
-
-                    // 更新动画timing
-                    item.animation.effect.updateTiming({ duration: newDuration });
-
-                    // 保持相同的进度
-                    item.animation.currentTime = progress * newDuration;
-                }
-            });
-        });
-    }
-
-    // 异步重建弹幕，避免阻塞UI
-    rebuildDanmakusAsync() {
-        // 使用requestAnimationFrame确保不阻塞主线程
-        requestAnimationFrame(() => {
-            console.log('开始异步重建弹幕...');
-
-            // 清空当前显示
-            this.clear();
-
-            // 重置弹幕状态
-            this.resetDanmakuStates();
-
-            // 如果视频正在播放，重新同步弹幕
-            if (this.video) {
-                this.resyncDanmakus();
-                if (this.video.paused) this.pause();
-                else this.start();
-            }
-
-            console.log('弹幕重建完成');
-        });
-    }
-
-    start() {
-        if (!this.settings.enabled) return;
-
-        this.isStarted = true;
-
-        // 恢复所有弹幕动画
-        this.tracks.forEach((track) => {
-            track.items.forEach((item) => {
-                if (item.animation && item.animation.playState === 'paused') {
-                    item.animation.play();
-                }
-            });
-        });
-
-        // 启动弹幕发射器
-        this.startEmitting();
-    }
-
-    // 启动弹幕发射和清理循环
-    startEmitting() {
-        if (this.emittingInterval) {
-            clearInterval(this.emittingInterval);
-        }
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
+            return;
         }
 
-        // 使用requestAnimationFrame获得最高帧率
-        this.emittingFrameId = null;
-        this.cleanupFrameId = null;
-        this.lastEmitTime = 0;
-        this.lastCleanupTime = 0;
+        const geometryChanged =
+            old.fontSize !== this.settings.fontSize ||
+            old.trackSpacing !== this.settings.trackSpacing ||
+            old.displayAreaPercentage !== this.settings.displayAreaPercentage ||
+            old.scaleWithPlayer !== this.settings.scaleWithPlayer;
+        const timingChanged =
+            old.enabled !== this.settings.enabled ||
+            old.speed !== this.settings.speed ||
+            old.weightThreshold !== this.settings.weightThreshold ||
+            old.timelineRate !== this.settings.timelineRate ||
+            old.timeOffset !== this.settings.timeOffset;
 
-        const emitLoop = (currentTime) => {
-            if (this.isStarted && this.video && !this.video.paused) {
-                // 控制发射频率到每0.5秒一次
-                if (currentTime - this.lastEmitTime >= 500) {
-                    this.checkAndEmitDanmakus();
-                    this.lastEmitTime = currentTime;
-                }
-
-                // 控制清理频率到每0.5秒一次
-                if (currentTime - this.lastCleanupTime >= 500) {
-                    this.cleanup();
-                    this.lastCleanupTime = currentTime;
-                }
-            }
-
-            if (this.isStarted) {
-                this.emittingFrameId = requestAnimationFrame(emitLoop);
-            }
-        };
-
-        this.emittingFrameId = requestAnimationFrame(emitLoop);
-    }
-
-    // 检查并发射新弹幕
-    checkAndEmitDanmakus() {
-        if (!this.video || !this.settings.enabled) return;
-
-        const currentTime = this.getDanmakuTime();
-
-        // 发射新弹幕
-        const newDanmakus = this.danmakus.filter((d) => {
-            if (d.emitted) return false;
-
-            // weight过滤
-            if (this.settings.weightThreshold > 0) {
-                const weight = d.weight !== undefined && d.weight !== null ? d.weight : 5;
-                if (weight < this.settings.weightThreshold) {
-                    return false;
-                }
-            }
-
-            const timeDiff = d.time - currentTime;
-            return timeDiff >= -0.5 && timeDiff <= 1.0;
-        });
-
-        // 按时间排序并限制数量
-        newDanmakus
-            .sort((a, b) => a.time - b.time)
-            .slice(0, 10)
-            .forEach((danmaku) => {
-                if (!danmaku.emitted) {
-                    this.emit(danmaku);
-                    danmaku.emitted = true;
-                }
-            });
-    }
-
-    pause() {
-        this.isStarted = false;
-
-        // 停止发射器
-        if (this.emittingInterval) {
-            clearInterval(this.emittingInterval);
-            this.emittingInterval = null;
-        }
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-            this.cleanupInterval = null;
-        }
-        if (this.emittingFrameId) {
-            cancelAnimationFrame(this.emittingFrameId);
-            this.emittingFrameId = null;
-        }
-
-        // 暂停所有弹幕动画
-        this.tracks.forEach((track) => {
-            track.items.forEach((item) => {
-                if (item.animation && item.animation.playState === 'running') {
-                    item.animation.pause();
-                }
-            });
-        });
-    }
-
-    clear() {
-        // 取消所有动画并清理DOM
-        this.tracks.forEach((track) => {
-            track.items.forEach((item) => {
-                if (item.animation) {
-                    item.animation.cancel();
-                }
-                if (item.elem) {
-                    item.elem.remove();
-                }
-            });
-            track.items = [];
-        });
-
-        // 清空舞台
-        this.stage.innerHTML = '';
-    }
-
-    // 重置所有弹幕的发射状态
-    resetDanmakuStates() {
-        if (this.danmakus && this.danmakus.length > 0) {
-            this.danmakus.forEach((danmaku) => {
-                danmaku.emitted = false;
-            });
-            console.log('已重置所有弹幕状态');
-        }
-    }
-
-    // 处理播放速度变化
-    handleSpeedChange(newRate) {
-        console.log(`播放速度变化: ${newRate}x`);
-
-        // Web Animations API实现：需要重新计算所有弹幕的时间进度
-        // 保持弹幕视觉速度恒定，但同步到新的播放速度
-        this.tracks.forEach((track) => {
-            track.items.forEach((item) => {
-                if (item.animation && item.danmaku) {
-                    // 重新计算弹幕应该的进度
-                    const currentVideoTime = this.getDanmakuTime();
-                    const visualElapsed = (currentVideoTime - item.danmaku.time) /
-                        (newRate * this.settings.timelineRate);
-                    const progressMs = Math.max(0, visualElapsed * 1000);
-                    const duration = item.animation.effect.getTiming().duration;
-
-                    if (progressMs <= duration) {
-                        item.animation.currentTime = progressMs;
-                    }
-                }
-            });
-        });
-
-        console.log('弹幕位置已根据新播放速度重新计算');
-    }
-
-    // 计算考虑播放速度的视觉经过时间
-    calculateVisualElapsed(videoTime, danmakuStartTime, playbackRate) {
-        const realElapsed = videoTime - danmakuStartTime;
-        return realElapsed / (playbackRate * this.settings.timelineRate);
+        if (geometryChanged) this.computeLayout();
+        if (geometryChanged || timingChanged) this.resyncDanmakus();
+        if (this.video && !this.video.paused) this.start();
     }
 
     getDanmakuTime() {
         return toDanmakuTime(this.video?.currentTime || 0, this.settings.timelineRate, this.settings.timeOffset);
     }
 
-    // 重新同步弹幕显示
+    /** Danmaku-timeline seconds per second of on-screen animation. */
+    timelineSpeed() {
+        return (this.video?.playbackRate || 1) * this.settings.timelineRate;
+    }
+
+    scrollDuration() {
+        return SCROLL_DURATION_MS / Math.max(0.1, Number(this.settings.speed) || 1);
+    }
+
+    passesFilter(danmaku) {
+        if (this.settings.weightThreshold > 0) {
+            const weight = danmaku.weight ?? 5;
+            if (weight < this.settings.weightThreshold) return false;
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ playback
+
+    start() {
+        if (!this.settings.enabled || !this.video || this.video.paused) return;
+        this.isStarted = true;
+        for (const item of this.items) {
+            if (item.animation.playState === 'paused') item.animation.play();
+        }
+        if (!this.frameId) this.frameId = requestAnimationFrame((t) => this.tick(t));
+    }
+
+    pause() {
+        this.isStarted = false;
+        if (this.frameId) {
+            cancelAnimationFrame(this.frameId);
+            this.frameId = null;
+        }
+        for (const item of this.items) {
+            if (item.animation.playState === 'running') item.animation.pause();
+        }
+    }
+
+    tick() {
+        this.frameId = null;
+        if (!this.isStarted || !this.video || this.video.paused) return;
+        const now = this.getDanmakuTime();
+        const last = this.lastDanmakuTime;
+        // Jumps not reported as seeks (e.g. YouTube ads or chapter skips): rebuild.
+        if (last !== null && (now < last - 0.3 || now > last + 2.5)) {
+            this.resyncDanmakus();
+        } else {
+            this.emitUntil(now);
+            this.lastDanmakuTime = now;
+        }
+        this.frameId = requestAnimationFrame((t) => this.tick(t));
+    }
+
+    /** Emit every comment whose time has come; comments more than a second late are skipped. */
+    emitUntil(now) {
+        const list = this.danmakus;
+        while (this.pointer < list.length && list[this.pointer].time <= now) {
+            const danmaku = list[this.pointer++];
+            const late = now - danmaku.time;
+            if (late <= 1 && this.passesFilter(danmaku)) this.emit(danmaku, late);
+        }
+    }
+
+    /** Rebuild the screen for the current time, with comments placed at their current progress. */
     resyncDanmakus() {
-        if (!this.video || !this.settings.enabled) return;
-
-        const currentTime = this.getDanmakuTime();
-
-        // 清空当前显示的弹幕
         this.clear();
-
-        // 重置所有弹幕状态
-        this.resetDanmakuStates();
-
-        // 找出应该在当前时间点显示的弹幕（已经开始但还未结束的）
-        const activeDanmakus = this.danmakus.filter((d) => {
-            const timeDiff = currentTime - d.time;
-
-            // weight过滤：如果设置了阈值，过滤掉低权重弹幕
-            if (this.settings.weightThreshold > 0) {
-                const weight = d.weight !== undefined && d.weight !== null ? d.weight : 5; // 默认权重5
-                if (weight < this.settings.weightThreshold) {
-                    return false;
-                }
-            }
-
-            // 弹幕显示时长约8秒，考虑一定的缓冲时间
-            return timeDiff >= -1.0 && timeDiff <= 8.0;
-        });
-
-        console.log(
-            `重新同步弹幕: 当前时间=${currentTime.toFixed(2)}s, 应显示=${activeDanmakus.length}条`
-        );
-
-        // 立即发射这些弹幕，并调整它们的显示进度
-        activeDanmakus.forEach((danmaku) => {
-            const timeDiff = currentTime - danmaku.time;
-            if (timeDiff >= 0 && timeDiff <= 8.0) {
-                this.emitWithProgress(danmaku, timeDiff);
-                danmaku.emitted = true;
-            }
-        });
+        if (!this.video || !this.settings.enabled || !this.danmakus.length) {
+            this.lastDanmakuTime = null;
+            return;
+        }
+        const now = this.getDanmakuTime();
+        const windowSeconds = (Math.max(this.scrollDuration(), FIXED_DURATION_MS) / 1000) * this.timelineSpeed();
+        this.pointer = lowerBound(this.danmakus, now - windowSeconds);
+        const list = this.danmakus;
+        while (this.pointer < list.length && list[this.pointer].time <= now) {
+            const danmaku = list[this.pointer++];
+            if (this.passesFilter(danmaku)) this.emit(danmaku, now - danmaku.time);
+        }
+        this.lastDanmakuTime = now;
+        if (this.video.paused) this.pause();
     }
 
-    // 发射弹幕并设置其进度
-    emitWithProgress(danmaku, elapsed) {
+    handleSpeedChange() {
+        // Comments keep a constant on-screen speed; only the mapping to video time changes.
+        this.resyncDanmakus();
+        if (this.video && !this.video.paused) this.start();
+    }
+
+    // ------------------------------------------------------------------ rendering
+
+    emit(danmaku, lateSeconds = 0) {
+        const mode = displayMode(danmaku);
+        if (!mode || !this.layout.width || !this.layout.height) return null;
+        const elapsedMs = Math.max(0, (lateSeconds / this.timelineSpeed()) * 1000);
+        const duration = mode === 'rtl' ? this.scrollDuration() : FIXED_DURATION_MS;
+        if (elapsedMs >= duration) return null;
+
+        const text = String(danmaku.text);
+        const width = this.measure(text);
+        const placement = mode === 'rtl'
+            ? this.placeScrolling(width, elapsedMs, duration)
+            : this.placeFixed(mode, elapsedMs, duration);
+        if (!placement) return null;
+
         const elem = document.createElement('div');
-        elem.textContent = danmaku.text;
+        elem.textContent = text;
         elem.style.color = danmaku.color || '#ffffff';
-        applyOutline(elem, danmaku.color);
-        elem.style.position = 'absolute';
-        elem.style.whiteSpace = 'nowrap';
-        elem.style.pointerEvents = 'none';
-        elem.style.zIndex = '9999';
-
-        // 查找可用轨道
-        const track = this.findAvailableTrack();
-        if (!track) return;
-
-        elem.style.top = track.top + 'px';
+        if (isDarkColor(danmaku.color)) elem.style.textShadow = DARK_OUTLINE;
+        elem.style.top = `${placement.top}px`;
+        if (mode !== 'rtl') elem.classList.add('bilibili-danmaku-fixed');
         this.stage.appendChild(elem);
 
-        // 获取弹幕宽度
-        const danmakuWidth = elem.offsetWidth;
-        const stageWidth = this.stage.offsetWidth;
+        const keyframes = mode === 'rtl'
+            ? [
+                  { transform: `translate3d(${this.layout.width}px, 0, 0)` },
+                  { transform: `translate3d(${-width}px, 0, 0)` }
+              ]
+            : [{ transform: 'translate3d(-50%, 0, 0)' }, { transform: 'translate3d(-50%, 0, 0)' }];
+        const animation = elem.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' });
+        animation.currentTime = elapsedMs;
+        if (!this.isStarted || !this.video || this.video.paused) animation.pause();
 
-        // 计算动画参数
-        const baseDuration = 8000;
-        const adjustedDuration = baseDuration / this.settings.speed;
-        const currentPlaybackRate = this.video?.playbackRate || 1.0;
-
-        // 使用Web Animations API创建动画
-        const animation = elem.animate(
-            [
-                {
-                    transform: `translateX(${stageWidth}px)`,
-                    offset: 0
-                },
-                {
-                    transform: `translateX(-${danmakuWidth}px)`,
-                    offset: 1
-                }
-            ],
-            {
-                duration: adjustedDuration,
-                easing: 'linear',
-                fill: 'forwards'
-            }
-        );
-
-        // 不设置playbackRate，让弹幕速度保持恒定
-        // animation.playbackRate = currentPlaybackRate; // 移除
-
-        // 设置动画进度到已经过的时间
-        // 弹幕视觉速度保持恒定，需要根据播放速度反算实际经过时间
-        const visualElapsed = elapsed / (currentPlaybackRate * this.settings.timelineRate);
-        const progressMs = visualElapsed * 1000;
-        animation.currentTime = Math.max(0, Math.min(progressMs, adjustedDuration));
-
-        const item = {
-            elem: elem,
-            animation: animation,
-            startVideoTime: danmaku.time,
-            baseDuration: baseDuration,
-            width: danmakuWidth,
-            danmaku: danmaku
-        };
-
-        track.items.push(item);
+        const item = { elem, animation, width, duration, mode, danmaku, lane: placement.lane };
+        animation.onfinish = () => this.removeItem(item);
+        this.items.add(item);
+        if (mode === 'rtl') this.tracks[placement.lane].items = [item];
+        else (mode === 'top' ? this.topLanes : this.bottomLanes)[placement.lane] = item;
         return item;
     }
 
-    // Web Animations API不需要手动动画循环
-    // animate() 方法已被移除
-
-    // update() 方法已被移除，功能分解到 checkAndEmitDanmakus() 和 cleanup()
-
-    emit(danmaku) {
-        const elem = document.createElement('div');
-        elem.textContent = danmaku.text;
-        elem.style.color = danmaku.color || '#ffffff';
-        applyOutline(elem, danmaku.color);
-        elem.style.position = 'absolute';
-        elem.style.whiteSpace = 'nowrap';
-        elem.style.pointerEvents = 'none';
-        elem.style.zIndex = '9999';
-
-        // 强制硬件加速和高性能
-        elem.style.willChange = 'transform';
-        elem.style.transform = 'translate3d(0, 0, 0)';
-        elem.style.backfaceVisibility = 'hidden';
-        elem.style.perspective = '1000px';
-
-        // 查找可用轨道
-        const track = this.findAvailableTrack();
-        if (!track) return;
-
-        elem.style.top = track.top + 'px';
-        this.stage.appendChild(elem);
-
-        // 获取弹幕宽度
-        const danmakuWidth = elem.offsetWidth;
-        const stageWidth = this.stage.offsetWidth;
-
-        // 计算动画参数
-        const baseDuration = 8000; // 基础8秒
-        const adjustedDuration = baseDuration / this.settings.speed;
-        // 移除playbackRate的影响，让弹幕速度保持恒定
-
-        // 使用Web Animations API创建动画
-        const animation = elem.animate(
-            [
-                {
-                    transform: `translateX(${stageWidth}px)`,
-                    offset: 0
-                },
-                {
-                    transform: `translateX(-${danmakuWidth}px)`,
-                    offset: 1
-                }
-            ],
-            {
-                duration: adjustedDuration,
-                easing: 'linear',
-                fill: 'forwards'
-            }
-        );
-
-        // 不设置playbackRate，让弹幕速度保持恒定
-        // animation.playbackRate = currentPlaybackRate; // 移除
-
-        const item = {
-            elem: elem,
-            animation: animation,
-            startVideoTime: this.getDanmakuTime(),
-            baseDuration: baseDuration,
-            width: danmakuWidth,
-            danmaku: danmaku
-        };
-
-        track.items.push(item);
-        return item;
-    }
-
-    findAvailableTrack() {
-        if (!this.video) return this.tracks[0];
-
-        const stageWidth = this.stage.offsetWidth;
-        const currentVideoTime = this.getDanmakuTime();
-        const playbackRate = this.video.playbackRate || 1.0;
-
-        for (const track of this.tracks) {
-            let available = true;
-
-            for (const item of track.items) {
-                if (!item.animation || !item.danmaku) continue;
-
-                // 计算考虑播放速度的视觉进度
-                const visualElapsed = this.calculateVisualElapsed(
-                    currentVideoTime,
-                    item.danmaku.time,
-                    playbackRate
-                );
-
-                const duration = item.animation.effect.getTiming().duration / 1000; // 转换为秒
-                const progress = Math.min(visualElapsed / duration, 1);
-
-                // 计算当前位置
-                const totalDistance = stageWidth + item.width;
-                const itemX = stageWidth - progress * totalDistance;
-
-                // 检查是否会重叠（保留100px间距）
-                if (itemX + item.width > stageWidth - 100) {
-                    available = false;
-                    break;
-                }
-            }
-
-            if (available) {
-                return track;
+    placeScrolling(width, elapsedMs, duration) {
+        const stageWidth = this.layout.width;
+        for (let lane = 0; lane < this.tracks.length; lane++) {
+            const previous = this.tracks[lane].items[0];
+            const state = previous && this.items.has(previous)
+                ? {
+                      width: previous.width,
+                      progress: Number(previous.animation.currentTime) || 0,
+                      duration: previous.duration
+                  }
+                : null;
+            if (laneAccepts(stageWidth, state, width, elapsedMs, duration)) {
+                return { lane, top: this.tracks[lane].top };
             }
         }
-
-        // 如果没有完全空闲的轨道，选择最快空闲的
-        return this.tracks[Math.floor(Math.random() * this.tracks.length)];
+        return null;
     }
 
-    // updatePositions() 方法已被移除，Web Animations API自动处理位置更新
+    placeFixed(mode, elapsedMs, duration) {
+        const lanes = mode === 'top' ? this.topLanes : this.bottomLanes;
+        const laneHeight = this.layout.laneHeight;
+        for (let lane = 0; lane < lanes.length; lane++) {
+            const current = lanes[lane];
+            if (current && this.items.has(current)) continue;
+            const top = mode === 'top'
+                ? lane * laneHeight
+                : this.layout.height - (lane + 1) * laneHeight - Math.round(laneHeight * 0.2);
+            return { lane, top: Math.max(0, top) };
+        }
+        return null;
+    }
 
-    // updateItemPosition() 方法已被移除，Web Animations API自动处理位置计算
+    removeItem(item, forget = true) {
+        if (!item) return;
+        try {
+            item.animation.onfinish = null;
+            item.animation.cancel();
+        } catch {
+            // Already cancelled.
+        }
+        item.elem.remove();
+        if (forget) this.items.delete(item);
+    }
 
-    cleanup() {
-        const stageWidth = this.stage.offsetWidth;
-
-        this.tracks.forEach((track) => {
-            track.items = track.items.filter((item) => {
-                if (!item.animation) {
-                    // 没有动画的异常情况，直接移除
-                    if (item.elem) item.elem.remove();
-                    return false;
-                }
-
-                // 检查动画状态
-                const animationState = item.animation.playState;
-
-                // 动画完成或被取消时移除
-                if (animationState === 'finished' || animationState === 'idle') {
-                    if (item.elem) item.elem.remove();
-                    return false;
-                }
-
-                // 使用Web Animations API检查位置
-                const currentTime = item.animation.currentTime || 0;
-                const duration = item.animation.effect.getTiming().duration;
-                const progress = currentTime / duration;
-
-                // 计算当前位置
-                const totalDistance = stageWidth + item.width;
-                const x = stageWidth - progress * totalDistance;
-
-                // 当弹幕完全移出左侧边界时移除
-                if (x < -item.width || progress >= 1) {
-                    item.animation.cancel();
-                    if (item.elem) item.elem.remove();
-                    return false;
-                }
-
-                return true;
-            });
-        });
+    clear() {
+        for (const item of this.items) this.removeItem(item, false);
+        this.items.clear();
+        for (const track of this.tracks) track.items = [];
+        this.topLanes.fill(null);
+        this.bottomLanes.fill(null);
+        if (this.stage) this.stage.replaceChildren();
     }
 
     destroy() {
         this.pause();
         this.clear();
-
-        // 清理所有定时器和动画帧
-        if (this.emittingInterval) {
-            clearInterval(this.emittingInterval);
-            this.emittingInterval = null;
-        }
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-            this.cleanupInterval = null;
-        }
-        if (this.emittingFrameId) {
-            cancelAnimationFrame(this.emittingFrameId);
-            this.emittingFrameId = null;
-        }
-
-        if (this.stage) {
-            this.stage.remove();
-        }
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-        }
+        clearTimeout(this.resizeTimer);
+        for (const remove of this.listeners) remove();
+        this.listeners = [];
+        if (this.stage) this.stage.remove();
+        if (this.resizeObserver) this.resizeObserver.disconnect();
         if (this.fullscreenChangeHandler) {
             document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
             document.removeEventListener('webkitfullscreenchange', this.fullscreenChangeHandler);
@@ -826,5 +454,4 @@ class DanmakuEngine {
     }
 }
 
-// ES模块导出
 export default DanmakuEngine;

@@ -822,7 +822,9 @@ export default defineBackground(() => {
                     d.color && typeof d.color === 'number'
                         ? `#${d.color.toString(16).padStart(6, '0')}`
                         : '#ffffff', // 默认白色
-                mode: d.mode === 1 ? 'rtl' : d.mode === 4 ? 'bottom' : 'top',
+                // Bilibili modes: 1-3 scroll, 4 bottom, 5 top, 6 reverse scroll (shown as scroll),
+                // 7+ advanced/code comments which this renderer cannot display.
+                mode: d.mode === 4 ? 'bottom' : d.mode === 5 ? 'top' : d.mode >= 7 ? 'special' : 'rtl',
                 weight: d.weight !== undefined && d.weight !== null ? d.weight : 5 // 添加权重字段，默认5
             }));
 

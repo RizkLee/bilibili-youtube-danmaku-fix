@@ -3,284 +3,388 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>B站弹幕设置</title>
+        <meta name="color-scheme" content="light dark" />
+        <title>B 站弹幕</title>
         <link rel="stylesheet" href="popup.css" />
     </head>
     <body>
-        <!-- 非YouTube页面的简化界面 -->
-        <div class="simple-container" id="simple-container" style="display: none">
-            <div class="simple-content">
-                <h2>当前不是 Youtube 页面哦</h2>
-                <!-- 社交图标区域 -->
+        <!-- 图标库（24 viewBox，描边 2，圆角端点） -->
+        <svg class="icon-sprite" aria-hidden="true" focusable="false">
+            <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="13.5" rx="3"/><path d="M8 2.5l4 4 4-4"/><path d="M9 12.5v3M15 12.5v3"/></symbol>
+            <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5l-4.35-4.35"/></symbol>
+            <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+            <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M12 17v-6M9 14l3-3 3 3"/></symbol>
+            <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+            <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/></symbol>
+            <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+            <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></symbol>
+            <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></symbol>
+            <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></symbol>
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+            <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
+            <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6M12 4v16"/></symbol>
+            <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+            <symbol id="i-rows" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+            <symbol id="i-area" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18"/></symbol>
+            <symbol id="i-filter" viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></symbol>
+            <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+            <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></symbol>
+            <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+            <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></symbol>
+            <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></symbol>
+            <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></symbol>
+            <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></symbol>
+            <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+            <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></symbol>
+            <symbol id="i-play" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.5v5l4.5-2.5z"/></symbol>
+            <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71M8 2v3M2 8h3M16 22v-3M22 16h-3"/></symbol>
+        </svg>
+
+        <!-- 非视频页面 -->
+        <div class="app simple-container" id="simple-container" style="display: none">
+            <header class="app-header">
+                <div class="brand-tile"><svg class="icon"><use href="#i-tv" /></svg></div>
+                <div class="app-heading">
+                    <h1 class="app-title">B 站弹幕</h1>
+                    <div class="app-status" data-tone="idle">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span class="app-status-text">等待视频页面</span>
+                    </div>
+                </div>
+            </header>
+            <section class="card empty-card">
+                <div class="empty-illustration"><svg class="icon"><use href="#i-play" /></svg></div>
+                <h2 class="empty-title">当前不是 YouTube 页面</h2>
+                <p class="empty-detail">在 YouTube 或夸克网盘的视频页打开扩展，即可为视频加载 B 站弹幕。</p>
+                <button type="button" id="open-youtube-btn" class="btn btn-primary btn-block">
+                    <svg class="icon"><use href="#i-external" /></svg>打开 YouTube
+                </button>
+            </section>
+            <footer class="app-footer">
                 <div class="social-icons" id="social-icons-simple" style="display: none"></div>
-                <button id="open-youtube-btn" class="youtube-btn">打开 YouTube</button>
-            </div>
+                <span class="app-footer-text">B2Y Fix</span>
+            </footer>
         </div>
 
         <!-- 夸克网盘专用界面 -->
-        <div class="container" id="quark-container" style="display: none">
-            <h1>B2Y 弹幕助手</h1>
-
-            <!-- 社交图标区域 -->
-            <div class="social-icons" id="social-icons-quark" style="display: none"></div>
-
-            <!-- 平台标识 -->
-            <div class="channel-info" id="quark-platform-info">
-                <div class="channel-header">
-                    <div class="channel-details" style="flex: 1">
-                        <h3 style="display: flex; align-items: center; gap: 8px">
-                            <span style="font-size: 18px">📺</span>
-                            夸克网盘
-                        </h3>
-                        <p
-                            id="quark-video-title"
-                            style="margin-top: 4px; color: #666; font-size: 12px"
-                        ></p>
+        <div class="app container" id="quark-container" style="display: none">
+            <header class="app-header">
+                <div class="brand-tile"><svg class="icon"><use href="#i-tv" /></svg></div>
+                <div class="app-heading">
+                    <h1 class="app-title">B 站弹幕</h1>
+                    <div class="app-status" id="quark-header-status" data-tone="idle" aria-live="polite">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span class="app-status-text" id="quark-header-status-text">未加载弹幕</span>
                     </div>
                 </div>
-            </div>
+                <span class="chip chip-muted app-platform">夸克网盘</span>
+            </header>
 
-            <!-- 已匹配视频 -->
-            <div class="quark-match-card" id="quark-match-card" style="display: none">
-                <div class="quark-match-status">已匹配</div>
-                <div class="quark-match-main">
-                    <img id="quark-match-cover" class="quark-match-cover" src="" alt="" />
-                    <div class="quark-match-content">
-                        <div class="quark-match-title" id="quark-match-title"></div>
-                        <div class="quark-match-meta">
-                            <span id="quark-match-author"></span>
-                            <span id="quark-match-ratio"></span>
+            <div class="status-bar" id="quark-status-bar" role="status"></div>
+
+            <section class="card hero-card">
+                <div class="hero-source" id="quark-platform-info">
+                    <span class="icon-tile tint-blue sm"><svg class="icon"><use href="#i-cloud" /></svg></span>
+                    <div class="hero-source-text">
+                        <span class="hero-source-label">夸克网盘视频</span>
+                        <div class="hero-source-title" id="quark-video-info" style="display: none">
+                            <span id="quark-video-title"></span>
                         </div>
                     </div>
                 </div>
-                <div class="quark-match-actions">
-                    <button type="button" id="quark-view-bilibili-btn">在 B 站查看</button>
-                    <button type="button" id="quark-manual-match-btn">手动匹配</button>
-                </div>
-            </div>
+                <div class="divider"></div>
 
-            <!-- 手动输入区域 -->
-            <div class="manual-input" id="quark-manual-input">
-                <div class="input-group">
-                    <label for="quark-bilibili-url">输入B站视频链接：</label>
-                    <input
-                        type="text"
-                        id="quark-bilibili-url"
-                        placeholder="B站 BV / av / bangumi/play/ep / bangumi/play/ss 链接"
-                    />
-                    <div class="button-group">
-                        <button id="quark-download-btn">下载弹幕</button>
-                        <button id="quark-import-xml-btn">导入本地弹幕</button>
-                        <input type="file" id="quark-xml-file-input" accept=".xml" style="display:none" />
+                <div class="hero-empty" id="quark-empty-state">
+                    <div class="cover-frame cover-placeholder"><svg class="icon"><use href="#i-search" /></svg></div>
+                    <div class="hero-empty-text">
+                        <div class="row-title">尚未匹配 B 站视频</div>
+                        <div class="row-detail">粘贴 B 站链接、导入本地 XML，或在页面右上角的「B站弹幕」面板中搜索。</div>
                     </div>
                 </div>
-            </div>
 
-            <div class="status-bar" id="quark-status-bar"></div>
-
-            <div class="danmaku-info" id="quark-danmaku-info"></div>
-
-            <div class="controls">
-                <div class="control-group">
-                    <label class="toggle">
-                        <span class="toggle-label">弹幕开关</span>
-                        <input type="checkbox" id="quark-enable-danmaku" checked />
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </label>
+                <div class="match-card quark-match-card" id="quark-match-card" style="display: none">
+                    <div class="match-main quark-match-main">
+                        <div class="cover-frame">
+                            <svg class="icon cover-fallback"><use href="#i-play" /></svg>
+                            <img id="quark-match-cover" class="match-cover quark-match-cover" src="" alt="" />
+                        </div>
+                        <div class="match-content quark-match-content">
+                            <div class="match-eyebrow">
+                                <span class="chip chip-green quark-match-status">已匹配</span>
+                                <span class="chip chip-blue danmaku-info" id="quark-danmaku-info"></span>
+                                <button type="button" class="icon-btn match-rematch" id="quark-manual-match-btn" title="重新匹配" aria-label="重新匹配">
+                                    <svg class="icon"><use href="#i-refresh" /></svg>
+                                </button>
+                            </div>
+                            <div class="match-title quark-match-title" id="quark-match-title"></div>
+                            <div class="match-meta quark-match-meta">
+                                <span id="quark-match-author"></span>
+                                <span id="quark-match-ratio"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="control-group">
-                    <label class="toggle">
-                        <span class="toggle-label">自动下载弹幕</span>
+                <div class="divider"></div>
+                <label class="toggle row row-master">
+                    <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-eye" /></svg></span>
+                    <span class="row-text">
+                        <span class="row-title toggle-label">显示弹幕</span>
+                        <span class="row-detail">在视频画面上叠加 B 站弹幕</span>
+                    </span>
+                    <input type="checkbox" id="quark-enable-danmaku" checked />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
+            </section>
+
+            <div class="quick-actions cols-3">
+                <button type="button" class="qa-tile" id="quark-qa-link-btn">
+                    <span class="qa-icon"><svg class="icon"><use href="#i-link" /></svg></span>
+                    <span class="qa-label">粘贴链接</span>
+                </button>
+                <button type="button" class="qa-tile" id="quark-import-xml-btn">
+                    <span class="qa-icon"><svg class="icon"><use href="#i-file" /></svg></span>
+                    <span class="qa-label">导入 XML</span>
+                </button>
+                <button type="button" class="qa-tile" id="quark-view-bilibili-btn" disabled>
+                    <span class="qa-icon"><svg class="icon"><use href="#i-external" /></svg></span>
+                    <span class="qa-label">在 B 站查看</span>
+                </button>
+            </div>
+            <input type="file" id="quark-xml-file-input" accept=".xml" hidden />
+
+            <section class="card panel-card manual-input" id="quark-manual-input">
+                <label class="panel-title" for="quark-bilibili-url">粘贴 B 站视频链接</label>
+                <div class="input-row">
+                    <input
+                        type="text"
+                        class="input"
+                        id="quark-bilibili-url"
+                        placeholder="BV / av / ep / ss 链接"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <button type="button" class="btn btn-primary" id="quark-download-btn">下载</button>
+                </div>
+                <p class="panel-hint">支持视频 BV / av 号与番剧 ep / ss 链接</p>
+            </section>
+
+            <details class="section" data-section="quark-match">
+                <summary class="section-summary">
+                    <span class="section-label">匹配</span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <label class="toggle row">
+                        <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
+                        <span class="row-text">
+                            <span class="row-title toggle-label">按标题自动匹配</span>
+                            <span class="row-detail">匹配度达标时自动下载弹幕；关闭后在页面面板中手动选择</span>
+                        </span>
                         <input type="checkbox" id="quark-auto-download" />
                         <span class="toggle-slider" aria-hidden="true"></span>
                     </label>
-                </div>
 
-                <div class="control-group" id="quark-match-threshold-group" style="display: none">
-                    <label for="quark-match-threshold">标题匹配度：</label>
-                    <input
-                        type="range"
-                        id="quark-match-threshold"
-                        min="50"
-                        max="100"
-                        value="90"
-                        step="5"
-                    />
-                    <span id="quark-match-threshold-value">90%</span>
-                    <p class="control-hint">大于匹配度的弹幕会自动下载</p>
-                </div>
-
-                <div class="control-group" id="quark-multi-match-group" style="display: none">
-                    <label>多匹配处理方式：</label>
-                    <div class="display-area-buttons quark-multi-match-buttons">
-                        <button
-                            type="button"
-                            class="display-area-btn quark-multi-match-btn active"
-                            data-value="mostDanmaku"
-                        >
-                            弹幕最多
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn quark-multi-match-btn"
-                            data-value="manualSelect"
-                        >
-                            弹出选择
-                        </button>
+                    <div class="row row-stack control-group" id="quark-match-threshold-group" style="display: none">
+                        <div class="row-head">
+                            <span class="icon-tile tint-green"><svg class="icon"><use href="#i-target" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="quark-match-threshold">标题匹配度</label>
+                                <span class="row-detail">达到匹配度的结果会自动下载</span>
+                            </span>
+                            <span class="value-chip" id="quark-match-threshold-value">90%</span>
+                        </div>
+                        <input type="range" id="quark-match-threshold" min="50" max="100" value="90" step="5" />
                     </div>
-                    <p class="control-hint">多个结果达到匹配度时的处理方式</p>
-                </div>
 
-                <div class="control-group">
-                    <label for="quark-time-offset">时间轴偏移：</label>
-                    <div class="time-offset-controls">
-                        <input
-                            type="range"
-                            id="quark-time-offset"
-                            min="-60"
-                            max="60"
-                            value="0"
-                            step="0.5"
-                        />
-                        <div class="time-offset-manual">
-                            <input
-                                type="number"
-                                id="quark-time-offset-input"
-                                value="0"
-                                step="0.5"
-                                placeholder="0"
-                            />
-                            <span class="time-unit">s</span>
+                    <div class="row row-stack control-group" id="quark-multi-match-group" style="display: none">
+                        <div class="row-head">
+                            <span class="icon-tile tint-amber"><svg class="icon"><use href="#i-layers" /></svg></span>
+                            <span class="row-text">
+                                <span class="row-title">多结果处理</span>
+                                <span class="row-detail">多个结果都达到匹配度时</span>
+                            </span>
+                        </div>
+                        <div class="segmented display-area-buttons quark-multi-match-buttons" role="group" aria-label="多结果处理">
+                            <button type="button" class="display-area-btn quark-multi-match-btn active" data-value="mostDanmaku">弹幕最多</button>
+                            <button type="button" class="display-area-btn quark-multi-match-btn" data-value="manualSelect">弹出选择</button>
                         </div>
                     </div>
                 </div>
+            </details>
 
-                <div class="control-group">
-                    <label for="quark-timeline-rate-select">弹幕时间轴倍率：</label>
-                    <select id="quark-timeline-rate-select">
-                        <option value="1">正常（1×）</option>
-                        <option value="0.96">B站25fps → 视频24fps（24/25×）</option>
-                        <option value="custom">自定义</option>
-                    </select>
-                    <input type="number" id="quark-timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
-                    <p class="control-hint">按 视频时间 × 倍率 + 偏移量 对齐弹幕；与滚动速度无关。</p>
-                </div>
+            <details class="section" data-section="quark-timeline" open>
+                <summary class="section-summary">
+                    <span class="section-label">时间轴同步</span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-clock" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="quark-time-offset">偏移</label>
+                                <span class="row-detail">弹幕与画面不同步时微调</span>
+                            </span>
+                            <span class="number-field time-offset-manual">
+                                <input type="number" id="quark-time-offset-input" value="0" step="0.5" placeholder="0" aria-label="时间轴偏移（秒）" />
+                                <span class="time-unit">s</span>
+                            </span>
+                        </div>
+                        <input type="range" id="quark-time-offset" min="-60" max="60" value="0" step="0.5" />
+                    </div>
 
-                <div class="control-group">
-                    <label for="quark-opacity">透明度：</label>
-                    <input type="range" id="quark-opacity" min="0" max="100" value="100" step="5" />
-                    <span id="quark-opacity-value">100%</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="quark-font-size">字体大小：</label>
-                    <input
-                        type="range"
-                        id="quark-font-size"
-                        min="16"
-                        max="48"
-                        value="24"
-                        step="2"
-                    />
-                    <span id="quark-font-size-value">24px</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="quark-speed">滚动速度：</label>
-                    <input type="range" id="quark-speed" min="0.5" max="2" value="1" step="0.1" />
-                    <span id="quark-speed-value">1.0x</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="quark-track-spacing">弹幕垂直间距：</label>
-                    <input
-                        type="range"
-                        id="quark-track-spacing"
-                        min="0"
-                        max="20"
-                        value="8"
-                        step="1"
-                    />
-                    <span id="quark-track-spacing-value">8px</span>
-                </div>
-
-                <div class="control-group">
-                    <label>显示区域：</label>
-                    <div class="display-area-buttons">
-                        <button
-                            type="button"
-                            class="display-area-btn quark-display-area-btn"
-                            data-value="10"
-                        >
-                            10%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn quark-display-area-btn"
-                            data-value="25"
-                        >
-                            25%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn quark-display-area-btn"
-                            data-value="50"
-                        >
-                            50%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn quark-display-area-btn"
-                            data-value="75"
-                        >
-                            75%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn quark-display-area-btn active"
-                            data-value="100"
-                        >
-                            100%
-                        </button>
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-purple"><svg class="icon"><use href="#i-gauge" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="quark-timeline-rate-select">倍率</label>
+                                <span class="row-detail">视频时间 × 倍率 + 偏移，与滚动速度无关</span>
+                            </span>
+                        </div>
+                        <div class="input-row">
+                            <select class="input select" id="quark-timeline-rate-select">
+                                <option value="1">正常（1×）</option>
+                                <option value="0.96">B站 25fps → 视频 24fps（24/25×）</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                            <input type="number" class="input input-narrow" id="quark-timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
+                        </div>
                     </div>
                 </div>
+            </details>
 
-                <div class="control-group">
-                    <label for="quark-filter-level">智能过滤：</label>
-                    <input
-                        type="range"
-                        id="quark-filter-level"
-                        min="0"
-                        max="10"
-                        value="0"
-                        step="1"
-                    />
-                    <span id="quark-filter-level-value">0（显示全部）</span>
-                </div>
-            </div>
-
-            <!-- 弹幕列表 -->
-            <div class="danmaku-list-container" id="quark-danmaku-list-container">
-                <div class="danmaku-list-header">
-                    <div class="danmaku-list-title">
-                        <h3>弹幕列表</h3>
+            <details class="section" data-section="quark-style" open>
+                <summary class="section-summary">
+                    <span class="section-label">显示样式</span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-drop" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="quark-opacity">透明度</label></span>
+                            <span class="value-chip" id="quark-opacity-value">100%</span>
+                        </div>
+                        <input type="range" id="quark-opacity" min="0" max="100" value="100" step="5" />
                     </div>
-                    <input type="text" id="quark-danmaku-search" placeholder="搜索弹幕..." />
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-type" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="quark-font-size">字号</label>
+                                <span class="row-detail">以 720p 高度的标准播放器为基准</span>
+                            </span>
+                            <span class="value-chip" id="quark-font-size-value">24px</span>
+                        </div>
+                        <input type="range" id="quark-font-size" min="16" max="48" value="24" step="2" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-amber"><svg class="icon"><use href="#i-zap" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="quark-speed">滚动速度</label></span>
+                            <span class="value-chip" id="quark-speed-value">1.0x</span>
+                        </div>
+                        <input type="range" id="quark-speed" min="0.5" max="2" value="1" step="0.1" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-green"><svg class="icon"><use href="#i-rows" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="quark-track-spacing">垂直间距</label></span>
+                            <span class="value-chip" id="quark-track-spacing-value">8px</span>
+                        </div>
+                        <input type="range" id="quark-track-spacing" min="0" max="20" value="8" step="1" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-purple"><svg class="icon"><use href="#i-area" /></svg></span>
+                            <span class="row-text">
+                                <span class="row-title">显示区域</span>
+                                <span class="row-detail">弹幕占用画面的高度</span>
+                            </span>
+                        </div>
+                        <div class="segmented display-area-buttons" role="group" aria-label="显示区域">
+                            <button type="button" class="display-area-btn quark-display-area-btn" data-value="10">10%</button>
+                            <button type="button" class="display-area-btn quark-display-area-btn" data-value="25">25%</button>
+                            <button type="button" class="display-area-btn quark-display-area-btn" data-value="50">50%</button>
+                            <button type="button" class="display-area-btn quark-display-area-btn" data-value="75">75%</button>
+                            <button type="button" class="display-area-btn quark-display-area-btn active" data-value="100">100%</button>
+                        </div>
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-red"><svg class="icon"><use href="#i-filter" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="quark-filter-level">智能过滤</label>
+                                <span class="row-detail">按弹幕权重隐藏低质量内容</span>
+                            </span>
+                            <span class="value-chip" id="quark-filter-level-value">显示全部</span>
+                        </div>
+                        <input type="range" id="quark-filter-level" min="0" max="10" value="0" step="1" />
+                    </div>
+
+                    <label class="toggle row">
+                        <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-expand" /></svg></span>
+                        <span class="row-text">
+                            <span class="row-title toggle-label">随播放器缩放</span>
+                            <span class="row-detail">全屏与小窗下弹幕相对画面大小保持一致</span>
+                        </span>
+                        <input type="checkbox" id="quark-scale-with-player" checked />
+                        <span class="toggle-slider" aria-hidden="true"></span>
+                    </label>
                 </div>
-                <div class="danmaku-list" id="quark-danmaku-list"></div>
-            </div>
+            </details>
+
+            <section class="section danmaku-list-container" id="quark-danmaku-list-container">
+                <div class="section-summary static">
+                    <span class="section-label">弹幕列表</span>
+                </div>
+                <div class="card list-panel">
+                    <div class="search-field">
+                        <svg class="icon"><use href="#i-search" /></svg>
+                        <input type="text" class="input" id="quark-danmaku-search" placeholder="搜索弹幕内容" autocomplete="off" />
+                    </div>
+                    <div class="danmaku-list" id="quark-danmaku-list"></div>
+                </div>
+            </section>
+
+            <footer class="app-footer">
+                <div class="social-icons" id="social-icons-quark" style="display: none"></div>
+                <span class="app-footer-text">B2Y Fix</span>
+            </footer>
         </div>
 
-        <!-- 原有的完整功能界面 -->
-        <div class="container" id="main-container">
-            <h1>B站弹幕 → YouTube</h1>
+        <!-- YouTube 完整功能界面 -->
+        <div class="app container" id="main-container">
+            <header class="app-header">
+                <div class="brand-tile"><svg class="icon"><use href="#i-tv" /></svg></div>
+                <div class="app-heading">
+                    <h1 class="app-title">B 站弹幕</h1>
+                    <div class="app-status" id="header-status" data-tone="idle" aria-live="polite">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span class="app-status-text" id="header-status-text">未加载弹幕</span>
+                    </div>
+                </div>
+                <span class="chip chip-muted app-platform">YouTube</span>
+            </header>
 
-            <!-- 社交图标区域 -->
-            <div class="social-icons" id="social-icons" style="display: none"></div>
+            <div class="status-bar" id="status-bar" role="status"></div>
 
-            <!-- YouTube频道信息展示 -->
-            <div class="channel-info" id="channel-info" style="display: none">
+            <div class="banner" id="youtube-banner" data-tone="warn" style="display: none" role="status">
+                <svg class="icon banner-icon"><use href="#i-alert" /></svg>
+                <span class="banner-text" id="youtube-banner-text"></span>
+            </div>
+
+            <!-- YouTube 频道信息（旧版模式 / 番剧频道） -->
+            <section class="card channel-info" id="channel-info" style="display: none">
                 <div class="channel-header">
                     <img id="channel-avatar" src="" alt="频道头像" class="channel-avatar" />
                     <div class="channel-details">
@@ -288,292 +392,347 @@
                         <p id="channel-id">频道ID</p>
                     </div>
                     <div class="association-status" id="association-status">
-                        <span class="status-text">未关联</span>
-                        <div class="associated-info" id="associated-info" style="display: none">
-                            <span class="associated-icon"></span>
+                        <span class="status-text chip chip-muted">未关联</span>
+                        <button type="button" class="associated-info" id="associated-info" style="display: none" title="点击解除关联">
+                            <svg class="icon associated-icon"><use href="#i-link" /></svg>
                             <span class="associated-uid" id="associated-uid">已关联：</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- YouTube 已匹配视频 -->
-            <div class="youtube-match-card" id="youtube-match-card" style="display: none">
-                <div class="youtube-match-status">已匹配</div>
-                <div class="youtube-match-main">
-                    <img id="youtube-match-cover" class="youtube-match-cover" src="" alt="" />
-                    <div class="youtube-match-content">
-                        <div class="youtube-match-title" id="youtube-match-title"></div>
-                        <div class="youtube-match-meta">
-                            <span id="youtube-match-author"></span>
-                            <span id="youtube-match-ratio"></span>
-                        </div>
-                    </div>
-                </div>
-                <div class="youtube-match-actions">
-                    <button type="button" id="youtube-view-bilibili-btn">在 B 站查看</button>
-                    <button type="button" id="youtube-manual-match-btn">手动匹配</button>
-                </div>
-            </div>
-
-            <!-- B站UP主关联区域 -->
-            <div class="association-section" id="association-section" style="display: none">
-                <div class="association-header">
-                    <h3>关联B站UP主</h3>
-                </div>
-                <div class="association-input">
-                    <input
-                        type="text"
-                        id="bilibili-space-url"
-                        placeholder="https://space.bilibili.com/339233162"
-                    />
-                    <button id="smart-search-btn" class="smart-search-btn" title="智能搜索并关联">
-                        智能搜索
-                    </button>
-                    <button id="associate-btn">关联</button>
-                </div>
-                <div class="association-info" id="association-info" style="display: none">
-                    <p>已关联：<span id="associated-up-name"></span></p>
-                    <button id="auto-search-btn">自动搜索弹幕</button>
-                    <button id="unassociate-btn">取消关联</button>
-                </div>
-            </div>
-
-            <!-- 自动搜索结果 -->
-            <div class="search-results" id="search-results" style="display: none">
-                <div class="youtube-search-header">
-                    <h3>B站弹幕</h3>
-                    <div class="youtube-search-box">
-                        <input
-                            type="text"
-                            id="youtube-search-input"
-                            placeholder="输入视频标题搜索"
-                        />
-                        <button type="button" id="youtube-search-btn" title="搜索">搜索</button>
-                    </div>
-                </div>
-                <div id="search-status"></div>
-                <div id="search-list"></div>
-            </div>
-
-            <!-- 手动输入区域 -->
-            <div class="manual-input" id="manual-input">
-                <div class="input-group">
-                    <label for="bilibili-url" id="bilibili-url-label"
-                        >或手动输入B站视频链接：</label
-                    >
-                    <input
-                        type="text"
-                        id="bilibili-url"
-                        placeholder="B站 BV / av / bangumi/play/ep / bangumi/play/ss 链接"
-                    />
-                    <div class="button-group">
-                        <button id="view-bilibili-btn" style="display: none">在B站查看</button>
-                        <button id="view-bilibili-space-btn" style="display: none">
-                            查看 B站空间
                         </button>
-                        <button id="download-btn">手动匹配</button>
-                        <button id="youtube-import-xml-btn">导入本地弹幕</button>
-                        <input type="file" id="youtube-xml-file-input" accept=".xml" style="display:none" />
                     </div>
                 </div>
+            </section>
+
+            <section class="card hero-card">
+                <div class="hero-empty" id="youtube-empty-state">
+                    <div class="cover-frame cover-placeholder"><svg class="icon"><use href="#i-search" /></svg></div>
+                    <div class="hero-empty-text">
+                        <div class="row-title">尚未匹配 B 站视频</div>
+                        <div class="row-detail" id="youtube-empty-detail">可搜索视频标题、粘贴 B 站链接或导入本地 XML。</div>
+                    </div>
+                </div>
+
+                <div class="match-card youtube-match-card" id="youtube-match-card" style="display: none">
+                    <div class="match-main youtube-match-main">
+                        <div class="cover-frame">
+                            <svg class="icon cover-fallback"><use href="#i-play" /></svg>
+                            <img id="youtube-match-cover" class="match-cover youtube-match-cover" src="" alt="" />
+                        </div>
+                        <div class="match-content youtube-match-content">
+                            <div class="match-eyebrow">
+                                <span class="chip chip-green youtube-match-status">已匹配</span>
+                                <span class="chip chip-blue danmaku-info" id="danmaku-info"></span>
+                                <button type="button" class="icon-btn match-rematch" id="youtube-manual-match-btn" title="重新匹配" aria-label="重新匹配">
+                                    <svg class="icon"><use href="#i-refresh" /></svg>
+                                </button>
+                            </div>
+                            <div class="match-title youtube-match-title" id="youtube-match-title"></div>
+                            <div class="match-meta youtube-match-meta">
+                                <span id="youtube-match-author"></span>
+                                <span id="youtube-match-ratio"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+                <label class="toggle row row-master">
+                    <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-eye" /></svg></span>
+                    <span class="row-text">
+                        <span class="row-title toggle-label">显示弹幕</span>
+                        <span class="row-detail">在视频画面上叠加 B 站弹幕</span>
+                    </span>
+                    <input type="checkbox" id="enable-danmaku" checked />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
+            </section>
+
+            <div class="quick-actions">
+                <button type="button" class="qa-tile" id="qa-search-btn">
+                    <span class="qa-icon"><svg class="icon"><use href="#i-search" /></svg></span>
+                    <span class="qa-label">搜索视频</span>
+                </button>
+                <button type="button" class="qa-tile" id="qa-link-btn">
+                    <span class="qa-icon"><svg class="icon"><use href="#i-link" /></svg></span>
+                    <span class="qa-label">粘贴链接</span>
+                </button>
+                <button type="button" class="qa-tile" id="youtube-import-xml-btn">
+                    <span class="qa-icon"><svg class="icon"><use href="#i-file" /></svg></span>
+                    <span class="qa-label">导入 XML</span>
+                </button>
+                <button type="button" class="qa-tile" id="youtube-view-bilibili-btn" disabled>
+                    <span class="qa-icon"><svg class="icon"><use href="#i-external" /></svg></span>
+                    <span class="qa-label">在 B 站查看</span>
+                </button>
             </div>
+            <input type="file" id="youtube-xml-file-input" accept=".xml" hidden />
 
-            <div class="status-bar" id="status-bar"></div>
+            <!-- B 站视频搜索 -->
+            <section class="card panel-card search-results" id="search-results" style="display: none">
+                <div class="panel-title">搜索 B 站视频</div>
+                <div class="input-row youtube-search-box">
+                    <div class="search-field">
+                        <svg class="icon"><use href="#i-search" /></svg>
+                        <input type="text" class="input" id="youtube-search-input" placeholder="输入视频标题" autocomplete="off" />
+                    </div>
+                    <button type="button" class="btn btn-primary" id="youtube-search-btn">搜索</button>
+                </div>
+                <div class="panel-hint" id="search-status"></div>
+                <div class="result-list" id="search-list"></div>
+            </section>
 
-            <div class="controls">
-                <div class="control-group">
-                    <label class="toggle">
-                        <span class="toggle-label">弹幕开关</span>
-                        <input type="checkbox" id="enable-danmaku" checked />
+            <!-- 手动输入链接 -->
+            <section class="card panel-card manual-input" id="manual-input">
+                <label class="panel-title" for="bilibili-url" id="bilibili-url-label">粘贴 B 站视频链接</label>
+                <div class="input-row">
+                    <input
+                        type="text"
+                        class="input"
+                        id="bilibili-url"
+                        placeholder="BV / av / ep / ss 链接"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <button type="button" class="btn btn-primary" id="download-btn">匹配</button>
+                </div>
+                <div class="button-row">
+                    <button type="button" class="btn btn-tonal btn-sm" id="view-bilibili-btn" style="display: none">
+                        <svg class="icon"><use href="#i-external" /></svg>在 B 站查看
+                    </button>
+                    <button type="button" class="btn btn-tonal btn-sm" id="view-bilibili-space-btn" style="display: none">查看 B 站空间</button>
+                </div>
+            </section>
+
+            <details class="section" data-section="match">
+                <summary class="section-summary">
+                    <span class="section-label">匹配</span>
+                    <span class="section-chip" id="match-summary-chip"></span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <label class="toggle row">
+                        <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-sparkle" /></svg></span>
+                        <span class="row-text">
+                            <span class="row-title toggle-label">按标题自动匹配</span>
+                            <span class="row-detail">关闭后不会把视频标题发送到 B 站搜索；可手动搜索或粘贴链接</span>
+                        </span>
+                        <input type="checkbox" id="auto-match-title" checked />
+                        <span class="toggle-slider" aria-hidden="true"></span>
+                    </label>
+
+                    <div class="row row-stack control-group" id="youtube-match-mode-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-purple"><svg class="icon"><use href="#i-scan" /></svg></span>
+                            <span class="row-text">
+                                <span class="row-title">识别模式</span>
+                                <span class="row-detail">新版按视频标题搜索 B 站，旧版使用 UP 关联和空间搜索</span>
+                            </span>
+                        </div>
+                        <div class="segmented display-area-buttons youtube-match-mode-buttons" role="group" aria-label="识别模式">
+                            <button type="button" class="display-area-btn youtube-match-mode-btn active" data-value="autoDownload">新版模式</button>
+                            <button type="button" class="display-area-btn youtube-match-mode-btn" data-value="legacy">旧版模式</button>
+                        </div>
+                    </div>
+
+                    <div class="row row-stack control-group auto-match-dependent" id="youtube-match-threshold-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-green"><svg class="icon"><use href="#i-target" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="youtube-match-threshold">标题匹配度</label>
+                                <span class="row-detail">达到匹配度的结果会自动下载</span>
+                            </span>
+                            <span class="value-chip" id="youtube-match-threshold-value">90%</span>
+                        </div>
+                        <input type="range" id="youtube-match-threshold" min="50" max="100" value="90" step="5" />
+                    </div>
+
+                    <div class="row row-stack control-group auto-match-dependent" id="youtube-multi-match-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-amber"><svg class="icon"><use href="#i-layers" /></svg></span>
+                            <span class="row-text">
+                                <span class="row-title">多结果处理</span>
+                                <span class="row-detail">多个结果都达到匹配度时</span>
+                            </span>
+                        </div>
+                        <div class="segmented display-area-buttons youtube-multi-match-buttons" role="group" aria-label="多结果处理">
+                            <button type="button" class="display-area-btn youtube-multi-match-btn active" data-value="mostDanmaku">弹幕最多</button>
+                            <button type="button" class="display-area-btn youtube-multi-match-btn" data-value="manualSelect">弹出选择</button>
+                        </div>
+                    </div>
+
+                    <!-- B 站 UP 主关联（旧版模式） -->
+                    <div class="row row-stack association-section" id="association-section" style="display: none">
+                        <div class="row-head">
+                            <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-user" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="bilibili-space-url">关联 B 站 UP 主</label>
+                                <span class="row-detail">关联后按 UP 主空间搜索同名视频</span>
+                            </span>
+                        </div>
+                        <div class="input-row association-input">
+                            <input type="text" class="input" id="bilibili-space-url" placeholder="space.bilibili.com/339233162" autocomplete="off" />
+                            <button type="button" class="btn btn-tonal" id="associate-btn">关联</button>
+                        </div>
+                        <button type="button" id="smart-search-btn" class="btn btn-text btn-sm smart-search-btn" title="智能搜索并关联">
+                            <svg class="icon"><use href="#i-sparkle" /></svg>智能搜索 UP 主
+                        </button>
+                        <div class="association-info" id="association-info" style="display: none">
+                            <p>已关联：<span id="associated-up-name"></span></p>
+                            <div class="button-row">
+                                <button type="button" class="btn btn-tonal btn-sm" id="auto-search-btn">自动搜索弹幕</button>
+                                <button type="button" class="btn btn-text btn-danger btn-sm" id="unassociate-btn">取消关联</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="section" data-section="timeline" open>
+                <summary class="section-summary">
+                    <span class="section-label">时间轴同步</span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-clock" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="time-offset">偏移</label>
+                                <span class="row-detail">弹幕与画面不同步时微调</span>
+                            </span>
+                            <button type="button" class="icon-btn" id="time-offset-reset" title="重置为 0" aria-label="重置偏移为 0" style="display: none">
+                                <svg class="icon"><use href="#i-reset" /></svg>
+                            </button>
+                            <span class="number-field time-offset-manual">
+                                <input type="number" id="time-offset-input" value="0" step="0.1" placeholder="0" aria-label="时间轴偏移（秒）" />
+                                <span class="time-unit">s</span>
+                            </span>
+                        </div>
+                        <input type="range" id="time-offset" min="-60" max="60" value="0" step="0.1" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-purple"><svg class="icon"><use href="#i-gauge" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="timeline-rate-select">倍率</label>
+                                <span class="row-detail">视频时间 × 倍率 + 偏移，与滚动速度无关</span>
+                            </span>
+                        </div>
+                        <div class="input-row">
+                            <select class="input select" id="timeline-rate-select">
+                                <option value="1">正常（1×）</option>
+                                <option value="0.96">B站 25fps → 视频 24fps（24/25×）</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                            <input type="number" class="input input-narrow" id="timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="section" data-section="style" open>
+                <summary class="section-summary">
+                    <span class="section-label">显示样式</span>
+                    <svg class="icon section-chevron"><use href="#i-chevron" /></svg>
+                </summary>
+                <div class="card list-card">
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-blue"><svg class="icon"><use href="#i-drop" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="opacity">透明度</label></span>
+                            <span class="value-chip" id="opacity-value">100%</span>
+                        </div>
+                        <input type="range" id="opacity" min="0" max="100" value="100" step="5" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-type" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="font-size">字号</label>
+                                <span class="row-detail">以 720p 高度的标准播放器为基准</span>
+                            </span>
+                            <span class="value-chip" id="font-size-value">24px</span>
+                        </div>
+                        <input type="range" id="font-size" min="16" max="48" value="24" step="2" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-amber"><svg class="icon"><use href="#i-zap" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="speed">滚动速度</label></span>
+                            <span class="value-chip" id="speed-value">1.0x</span>
+                        </div>
+                        <input type="range" id="speed" min="0.5" max="2" value="1" step="0.1" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-green"><svg class="icon"><use href="#i-rows" /></svg></span>
+                            <span class="row-text"><label class="row-title" for="track-spacing">垂直间距</label></span>
+                            <span class="value-chip" id="track-spacing-value">8px</span>
+                        </div>
+                        <input type="range" id="track-spacing" min="0" max="20" value="8" step="1" />
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-purple"><svg class="icon"><use href="#i-area" /></svg></span>
+                            <span class="row-text">
+                                <span class="row-title">显示区域</span>
+                                <span class="row-detail">弹幕占用画面的高度</span>
+                            </span>
+                        </div>
+                        <div class="segmented display-area-buttons" role="group" aria-label="显示区域">
+                            <button type="button" class="display-area-btn youtube-display-area-btn" data-value="10">10%</button>
+                            <button type="button" class="display-area-btn youtube-display-area-btn" data-value="25">25%</button>
+                            <button type="button" class="display-area-btn youtube-display-area-btn" data-value="50">50%</button>
+                            <button type="button" class="display-area-btn youtube-display-area-btn" data-value="75">75%</button>
+                            <button type="button" class="display-area-btn youtube-display-area-btn active" data-value="100">100%</button>
+                        </div>
+                    </div>
+
+                    <div class="row row-stack control-group">
+                        <div class="row-head">
+                            <span class="icon-tile tint-red"><svg class="icon"><use href="#i-filter" /></svg></span>
+                            <span class="row-text">
+                                <label class="row-title" for="weight-threshold">智能过滤</label>
+                                <span class="row-detail">按弹幕权重隐藏低质量内容</span>
+                            </span>
+                            <span class="value-chip" id="weight-threshold-value">5 级以下</span>
+                        </div>
+                        <input type="range" id="weight-threshold" min="0" max="10" value="5" step="1" />
+                    </div>
+
+                    <label class="toggle row">
+                        <span class="icon-tile tint-orange"><svg class="icon"><use href="#i-expand" /></svg></span>
+                        <span class="row-text">
+                            <span class="row-title toggle-label">随播放器缩放</span>
+                            <span class="row-detail">全屏与小窗下弹幕相对画面大小保持一致</span>
+                        </span>
+                        <input type="checkbox" id="scale-with-player" checked />
                         <span class="toggle-slider" aria-hidden="true"></span>
                     </label>
                 </div>
+            </details>
 
-                <div class="control-group" id="youtube-match-threshold-group">
-                    <label for="youtube-match-threshold">标题匹配度：</label>
-                    <input
-                        type="range"
-                        id="youtube-match-threshold"
-                        min="50"
-                        max="100"
-                        value="90"
-                        step="5"
-                    />
-                    <span id="youtube-match-threshold-value">90%</span>
-                    <p class="control-hint">大于匹配度的弹幕会自动下载</p>
+            <section class="section danmaku-list-container" id="danmaku-list-container">
+                <div class="section-summary static">
+                    <span class="section-label">弹幕列表</span>
+                    <span class="section-chip" id="danmaku-list-count"></span>
                 </div>
-
-                <div class="control-group" id="youtube-multi-match-group">
-                    <label>多匹配处理方式：</label>
-                    <div class="display-area-buttons youtube-multi-match-buttons">
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-multi-match-btn active"
-                            data-value="mostDanmaku"
-                        >
-                            弹幕最多
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-multi-match-btn"
-                            data-value="manualSelect"
-                        >
-                            弹出选择
-                        </button>
+                <div class="card list-panel">
+                    <div class="search-field">
+                        <svg class="icon"><use href="#i-search" /></svg>
+                        <input type="text" class="input" id="danmaku-search" placeholder="搜索弹幕内容" autocomplete="off" />
                     </div>
-                    <p class="control-hint">多个结果达到匹配度时的处理方式</p>
+                    <div class="danmaku-list" id="danmaku-list"></div>
                 </div>
+            </section>
 
-                <div class="control-group" id="youtube-match-mode-group">
-                    <label>识别模式：</label>
-                    <div class="display-area-buttons youtube-match-mode-buttons">
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-match-mode-btn active"
-                            data-value="autoDownload"
-                        >
-                            新版模式
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-match-mode-btn"
-                            data-value="legacy"
-                        >
-                            旧版模式
-                        </button>
-                    </div>
-                    <p class="control-hint">新版按视频标题搜索 B 站，旧版使用 UP 关联和空间搜索</p>
-                </div>
-
-                <div class="control-group">
-                    <label for="time-offset"
-                        >时间轴偏移：
-                        <button
-                            type="button"
-                            id="time-offset-reset"
-                            title="重置为0"
-                            style="display: none"
-                        >
-                            ⟲
-                        </button>
-                    </label>
-                    <div class="time-offset-controls">
-                        <input
-                            type="range"
-                            id="time-offset"
-                            min="-60"
-                            max="60"
-                            value="0"
-                            step="0.1"
-                        />
-                        <div class="time-offset-manual">
-                            <input
-                                type="number"
-                                id="time-offset-input"
-                                value="0"
-                                step="0.1"
-                                placeholder="0"
-                            />
-                            <span class="time-unit">s</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="control-group">
-                    <label for="timeline-rate-select">弹幕时间轴倍率：</label>
-                    <select id="timeline-rate-select">
-                        <option value="1">正常（1×）</option>
-                        <option value="0.96">B站25fps → 视频24fps（24/25×）</option>
-                        <option value="custom">自定义</option>
-                    </select>
-                    <input type="number" id="timeline-rate-input" min="0.25" max="4" step="0.0001" value="1" aria-label="自定义弹幕时间轴倍率" />
-                    <p class="control-hint">按 视频时间 × 倍率 + 偏移量 对齐弹幕；与滚动速度无关。</p>
-                </div>
-
-                <div class="control-group">
-                    <label for="opacity">透明度：</label>
-                    <input type="range" id="opacity" min="0" max="100" value="100" step="5" />
-                    <span id="opacity-value">100%</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="font-size">字体大小：</label>
-                    <input type="range" id="font-size" min="16" max="48" value="24" step="2" />
-                    <span id="font-size-value">24px</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="speed">滚动速度：</label>
-                    <input type="range" id="speed" min="0.5" max="2" value="1" step="0.1" />
-                    <span id="speed-value">1.0x</span>
-                </div>
-
-                <div class="control-group">
-                    <label for="track-spacing">弹幕垂直间距：</label>
-                    <input type="range" id="track-spacing" min="0" max="20" value="8" step="1" />
-                    <span id="track-spacing-value">8px</span>
-                </div>
-
-                <div class="control-group">
-                    <label>显示区域：</label>
-                    <div class="display-area-buttons">
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-display-area-btn"
-                            data-value="10"
-                        >
-                            10%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-display-area-btn"
-                            data-value="25"
-                        >
-                            25%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-display-area-btn"
-                            data-value="50"
-                        >
-                            50%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-display-area-btn"
-                            data-value="75"
-                        >
-                            75%
-                        </button>
-                        <button
-                            type="button"
-                            class="display-area-btn youtube-display-area-btn active"
-                            data-value="100"
-                        >
-                            100%
-                        </button>
-                    </div>
-                </div>
-
-                <div class="control-group">
-                    <label for="weight-threshold">智能过滤：</label>
-                    <input type="range" id="weight-threshold" min="0" max="10" value="5" step="1" />
-                    <span id="weight-threshold-value">5（过滤等级）</span>
-                </div>
-            </div>
-
-            <div class="danmaku-info" id="danmaku-info"></div>
-
-            <div class="danmaku-list-container" id="danmaku-list-container">
-                <div class="danmaku-list-header">
-                    <div class="danmaku-list-title">
-                        <h3>弹幕列表</h3>
-                    </div>
-                    <input type="text" id="danmaku-search" placeholder="搜索弹幕..." />
-                </div>
-                <div class="danmaku-list" id="danmaku-list"></div>
-            </div>
+            <footer class="app-footer">
+                <div class="social-icons" id="social-icons" style="display: none"></div>
+                <span class="app-footer-text">B2Y Fix</span>
+            </footer>
         </div>
         <script type="module" src="../../utils/channelAssociation.js"></script>
         <script type="module" src="./popup.js"></script>

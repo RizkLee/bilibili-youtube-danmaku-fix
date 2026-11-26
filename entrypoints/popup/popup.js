@@ -44,6 +44,198 @@ function sortResultsByDanmaku(results) {
     );
 }
 
+function stripHtml(value) {
+    return String(value ?? '').replace(/<[^>]*>/g, '');
+}
+
+// ---------- UI helpers: header status, banner, toast, sliders, sections ----------
+const STATUS_TONES = { loading: 'busy', success: 'ok', error: 'error', info: 'warn' };
+const headerState = {
+    main: { count: 0, revertTimer: null },
+    quark: { count: 0, revertTimer: null }
+};
+const toastTimers = new Map();
+
+function setHeaderStatus(scope, text, tone = 'idle') {
+    const prefix = scope === 'quark' ? 'quark-' : '';
+    const root = document.getElementById(`${prefix}header-status`);
+    const textEl = document.getElementById(`${prefix}header-status-text`);
+    if (!root || !textEl) return;
+    root.dataset.tone = tone;
+    textEl.textContent = text;
+    textEl.title = text;
+}
+
+function isHeaderFlashing(scope) {
+    return !!headerState[scope]?.revertTimer;
+}
+
+// Base state of the header: reflects loaded danmaku count and the master toggle.
+function renderHeaderBase(scope = 'main') {
+    const state = headerState[scope];
+    if (state.revertTimer) {
+        clearTimeout(state.revertTimer);
+        state.revertTimer = null;
+    }
+    const toggle = document.getElementById(
+        scope === 'quark' ? 'quark-enable-danmaku' : 'enable-danmaku'
+    );
+    const enabled = toggle ? toggle.checked : true;
+    if (state.count > 0) {
+        if (enabled) {
+            setHeaderStatus(scope, `已加载 ${state.count} 条弹幕`, 'ok');
+        } else {
+            setHeaderStatus(scope, `弹幕已隐藏（${state.count} 条）`, 'idle');
+        }
+    } else {
+        setHeaderStatus(scope, enabled ? '未加载弹幕' : '弹幕已关闭', 'idle');
+    }
+}
+
+// Temporarily show a status message in the header, then fall back to the base state.
+function flashHeaderStatus(scope, message, type) {
+    const state = headerState[scope];
+    setHeaderStatus(scope, message, STATUS_TONES[type] || 'idle');
+    if (state.revertTimer) clearTimeout(state.revertTimer);
+    state.revertTimer = setTimeout(
+        () => {
+            state.revertTimer = null;
+            renderHeaderBase(scope);
+        },
+        type === 'loading' ? 15000 : 3000
+    );
+}
+
+// Errors also get a toast so long messages stay readable; other messages live in the header.
+function showToast(statusBar, message, type) {
+    if (!statusBar) return;
+    clearTimeout(toastTimers.get(statusBar));
+    if (type !== 'error') {
+        statusBar.classList.remove('show');
+        return;
+    }
+    statusBar.textContent = message;
+    statusBar.className = `status-bar show ${type}`;
+    toastTimers.set(
+        statusBar,
+        setTimeout(() => statusBar.classList.remove('show'), 4000)
+    );
+}
+
+function showBanner(message, tone = 'warn') {
+    const banner = document.getElementById('youtube-banner');
+    const text = document.getElementById('youtube-banner-text');
+    if (!banner || !text) return;
+    text.textContent = message;
+    banner.dataset.tone = tone;
+    banner.querySelector('use')?.setAttribute('href', tone === 'info' ? '#i-info' : '#i-alert');
+    banner.style.display = 'flex';
+}
+
+function hideBanner() {
+    const banner = document.getElementById('youtube-banner');
+    if (banner) banner.style.display = 'none';
+}
+
+function syncRangeFill(input) {
+    if (!input) return;
+    const min = parseFloat(input.min) || 0;
+    const max = Number.isFinite(parseFloat(input.max)) ? parseFloat(input.max) : 100;
+    const span = max - min;
+    const pct = span > 0 ? ((parseFloat(input.value) - min) / span) * 100 : 0;
+    input.style.setProperty('--fill', `${Math.min(100, Math.max(0, pct))}%`);
+}
+
+function syncAllRangeFills() {
+    document.querySelectorAll('input[type="range"]').forEach(syncRangeFill);
+}
+
+document.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type === 'range') {
+        syncRangeFill(target);
+    }
+});
+
+function formatWeightThreshold(value) {
+    const level = parseInt(value) || 0;
+    return level === 0 ? '显示全部' : `隐藏 ${level} 级以下`;
+}
+
+const SECTION_STATE_KEY = 'b2y.popup.sections';
+function initCollapsibleSections() {
+    let saved = {};
+    try {
+        saved = JSON.parse(localStorage.getItem(SECTION_STATE_KEY) || '{}') || {};
+    } catch (error) {
+        saved = {};
+    }
+    document.querySelectorAll('details.section[data-section]').forEach((details) => {
+        const key = details.dataset.section;
+        if (typeof saved[key] === 'boolean') details.open = saved[key];
+        details.addEventListener('toggle', () => {
+            saved[key] = details.open;
+            try {
+                localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(saved));
+            } catch (error) {
+                // localStorage may be unavailable; the default open state is fine.
+            }
+        });
+    });
+}
+
+function isAutoMatchByTitleEnabled() {
+    return document.getElementById('auto-match-title')?.checked !== false;
+}
+
+function setGroupDisabled(group, disabled) {
+    if (!group) return;
+    group.classList.toggle('is-disabled', disabled);
+    group.setAttribute('aria-disabled', String(disabled));
+    group.querySelectorAll('input, button').forEach((el) => {
+        el.disabled = disabled;
+    });
+}
+
+// Dim threshold / multi-match controls when automatic title matching is off.
+function updateAutoMatchControls() {
+    const enabled = isAutoMatchByTitleEnabled();
+    setGroupDisabled(document.getElementById('youtube-match-threshold-group'), !enabled);
+    setGroupDisabled(document.getElementById('youtube-multi-match-group'), !enabled);
+
+    const chip = document.getElementById('match-summary-chip');
+    if (chip) {
+        const threshold = document.getElementById('youtube-match-threshold')?.value || 90;
+        chip.textContent = !enabled
+            ? '手动'
+            : getYouTubeMatchMode() === 'legacy'
+              ? '旧版模式'
+              : `自动 ${threshold}%`;
+    }
+
+    const emptyDetail = document.getElementById('youtube-empty-detail');
+    if (emptyDetail) {
+        emptyDetail.textContent = enabled
+            ? '可搜索视频标题、粘贴 B 站链接或导入本地 XML。'
+            : '已关闭按标题自动匹配，可手动搜索、粘贴链接或导入 XML。';
+    }
+}
+
+function describeMatchSource(data) {
+    if (data?.matchSource === 'local_xml') {
+        return { author: '本地 XML 文件', ratio: '' };
+    }
+    return {
+        author: data?.bilibili_author ? `UP：${data.bilibili_author}` : 'UP：未知',
+        ratio:
+            typeof data?.matchRatio === 'number'
+                ? `匹配 ${Math.round(data.matchRatio * 100)}%`
+                : '手动匹配'
+    };
+}
+
+const checkIconHtml = '<svg class="icon"><use href="#i-check" /></svg>';
+
 function getTimelineRateFromUI(prefix = '') {
     return normalizeTimelineRate(document.getElementById(`${prefix}timeline-rate-input`)?.value);
 }
@@ -114,13 +306,12 @@ async function resolveManualBilibiliSource(inputId, status) {
             const selector = document.createElement('select');
             selector.id = selectId;
             selector.dataset.seasonId = String(source.seasonId);
-            selector.style.width = '100%';
-            selector.style.marginTop = '8px';
+            selector.className = 'input select episode-select';
             selector.appendChild(new Option('请选择要移植弹幕的剧集', ''));
             for (const ep of result.episodes) {
                 selector.appendChild(new Option(ep.label + (ep.badge ? '（' + ep.badge + '）' : ''), ep.id));
             }
-            input.insertAdjacentElement('afterend', selector);
+            (input.closest('.input-row') || input).insertAdjacentElement('afterend', selector);
             status('已找到《' + result.title + '》，请选择剧集后再次点击匹配', 'success');
             return null;
         }
@@ -213,21 +404,21 @@ function renderQuarkMatchedVideo(data) {
         }
     }
 
-    if (title) title.textContent = data.bilibili_title || bvid || '已匹配视频';
-    if (author)
-        author.textContent = data.bilibili_author ? `UP：${data.bilibili_author}` : 'UP：未知';
-    if (ratio) {
-        ratio.textContent =
-            typeof data.matchRatio === 'number'
-                ? `匹配${Math.round(data.matchRatio * 100)}%`
-                : '手动匹配';
+    const sourceInfo = describeMatchSource(data);
+    if (title) {
+        title.textContent = data.bilibili_title || bvid || '已匹配视频';
+        title.title = title.textContent;
     }
+    if (author) author.textContent = sourceInfo.author;
+    if (ratio) ratio.textContent = sourceInfo.ratio;
     if (viewBtn) {
         viewBtn.dataset.url = bilibiliUrl;
         viewBtn.disabled = !bilibiliUrl;
     }
 
     card.style.display = 'block';
+    const emptyState = document.getElementById('quark-empty-state');
+    if (emptyState) emptyState.style.display = 'none';
     setQuarkManualInputVisible(false);
 }
 
@@ -236,6 +427,10 @@ function hideQuarkMatchedVideo() {
     if (card) {
         card.style.display = 'none';
     }
+    const emptyState = document.getElementById('quark-empty-state');
+    if (emptyState) emptyState.style.display = '';
+    const viewBtn = document.getElementById('quark-view-bilibili-btn');
+    if (viewBtn) viewBtn.disabled = true;
 }
 
 function setYouTubeManualInputVisible(visible) {
@@ -269,21 +464,22 @@ function renderYouTubeMatchedVideo(data) {
         }
     }
 
-    if (title) title.textContent = data.bilibili_title || bvid || '已匹配视频';
-    if (author)
-        author.textContent = data.bilibili_author ? `UP：${data.bilibili_author}` : 'UP：未知';
-    if (ratio) {
-        ratio.textContent =
-            typeof data.matchRatio === 'number'
-                ? `匹配${Math.round(data.matchRatio * 100)}%`
-                : '手动匹配';
+    const sourceInfo = describeMatchSource(data);
+    if (title) {
+        title.textContent = data.bilibili_title || bvid || '已匹配视频';
+        title.title = title.textContent;
     }
+    if (author) author.textContent = sourceInfo.author;
+    if (ratio) ratio.textContent = sourceInfo.ratio;
     if (viewBtn) {
         viewBtn.dataset.url = bilibiliUrl;
         viewBtn.disabled = !bilibiliUrl;
     }
 
     card.style.display = 'block';
+    const emptyState = document.getElementById('youtube-empty-state');
+    if (emptyState) emptyState.style.display = 'none';
+    hideBanner();
     setYouTubeManualInputVisible(false);
 }
 
@@ -292,6 +488,10 @@ function hideYouTubeMatchedVideo() {
     if (card) {
         card.style.display = 'none';
     }
+    const emptyState = document.getElementById('youtube-empty-state');
+    if (emptyState) emptyState.style.display = '';
+    const viewBtn = document.getElementById('youtube-view-bilibili-btn');
+    if (viewBtn) viewBtn.disabled = true;
 }
 
 function getYouTubeMatchMode() {
@@ -328,6 +528,7 @@ function updateYouTubeMatchModeControls() {
     if (channelInfo && !isLegacy) channelInfo.style.display = 'none';
     if (associationSection) associationSection.style.display = isLegacy ? 'block' : 'none';
     if (associationStatus) associationStatus.style.display = isLegacy ? 'block' : 'none';
+    updateAutoMatchControls();
 }
 
 function updateYouTubeSearchInput(keyword) {
@@ -415,14 +616,16 @@ function renderSocialIcons(config) {
 
         // 渲染每个图标
         config.socialLinks.forEach((link) => {
-            const iconElement = document.createElement('div');
+            const iconElement = document.createElement('button');
+            iconElement.type = 'button';
             iconElement.className = 'social-icon';
             const tooltipText = link.tooltip || link.name;
             iconElement.setAttribute('data-tooltip', tooltipText);
+            iconElement.setAttribute('aria-label', tooltipText);
 
             const imgElement = document.createElement('img');
             imgElement.src = link.icon;
-            imgElement.alt = link.name;
+            imgElement.alt = '';
             const fallbackElement = document.createElement('span');
             fallbackElement.className = 'social-icon-fallback';
             fallbackElement.textContent =
@@ -462,26 +665,21 @@ async function initSocialIcons() {
 
 // 显示状态信息
 function showStatus(message, type = 'loading') {
-    const statusBar = document.getElementById('status-bar');
-    statusBar.textContent = message;
-    statusBar.className = `status-bar show ${type}`;
-
-    if (type !== 'loading') {
-        setTimeout(() => {
-            statusBar.classList.remove('show');
-        }, 3000);
-    }
+    flashHeaderStatus('main', message, type);
+    showToast(document.getElementById('status-bar'), message, type);
 }
 
 // 更新弹幕信息
 function updateDanmakuInfo(count) {
     const info = document.getElementById('danmaku-info');
+    headerState.main.count = count > 0 ? count : 0;
     if (count > 0) {
-        info.textContent = `已加载 ${count} 条弹幕`;
+        info.textContent = `${count} 条弹幕`;
         info.classList.add('show');
     } else {
         info.classList.remove('show');
     }
+    if (!isHeaderFlashing('main')) renderHeaderBase('main');
 }
 
 // 获取显示区域按钮组的值
@@ -529,7 +727,9 @@ async function saveSettings() {
         youtubeMatchMode: getYouTubeMatchMode(),
         youtubeMatchThreshold:
             parseInt(document.getElementById('youtube-match-threshold')?.value) || 90,
-        youtubeMultiMatchMode: getYouTubeMultiMatchMode()
+        youtubeMultiMatchMode: getYouTubeMultiMatchMode(),
+        autoMatchByTitle: document.getElementById('auto-match-title')?.checked ?? true,
+        scaleWithPlayer: document.getElementById('scale-with-player')?.checked ?? true
     };
 
     await browser.storage.local.set({ danmakuSettings: settings });
@@ -559,7 +759,9 @@ async function loadSettings() {
         weightThreshold: 5,
         youtubeMatchMode: 'autoDownload',
         youtubeMatchThreshold: 90,
-        youtubeMultiMatchMode: 'mostDanmaku'
+        youtubeMultiMatchMode: 'mostDanmaku',
+        autoMatchByTitle: true,
+        scaleWithPlayer: true
     };
     const settings = {
         ...defaultSettings,
@@ -567,6 +769,10 @@ async function loadSettings() {
     };
 
     document.getElementById('enable-danmaku').checked = settings.enabled;
+    const autoMatchEl = document.getElementById('auto-match-title');
+    if (autoMatchEl) autoMatchEl.checked = settings.autoMatchByTitle !== false;
+    const scaleEl = document.getElementById('scale-with-player');
+    if (scaleEl) scaleEl.checked = settings.scaleWithPlayer !== false;
     document.getElementById('time-offset').value = settings.timeOffset;
     setTimelineRateUI('', settings.timelineRate);
 
@@ -600,6 +806,7 @@ async function loadSettings() {
 
     updateSliderValues();
     updateYouTubeMatchModeControls();
+    if (!isHeaderFlashing('main')) renderHeaderBase('main');
 }
 
 // 更新重置按钮显示状态
@@ -608,8 +815,9 @@ function updateResetButtonVisibility() {
     const resetBtn = document.getElementById('time-offset-reset');
 
     if (resetBtn) {
-        resetBtn.style.display = timeOffsetValue !== 0 ? 'inline-block' : 'none';
+        resetBtn.style.display = timeOffsetValue !== 0 ? 'inline-flex' : 'none';
     }
+    syncRangeFill(document.getElementById('time-offset'));
 }
 
 // 更新滑块显示值
@@ -630,19 +838,21 @@ function updateSliderValues() {
     document.getElementById('font-size-value').textContent =
         document.getElementById('font-size').value + 'px';
     document.getElementById('speed-value').textContent =
-        document.getElementById('speed').value + 'x';
+        Number(document.getElementById('speed').value).toFixed(1) + 'x';
     document.getElementById('track-spacing-value').textContent =
         document.getElementById('track-spacing').value + 'px';
 
     const weightValue = document.getElementById('weight-threshold').value;
     document.getElementById('weight-threshold-value').textContent =
-        weightValue === '0' ? '0（显示全部）' : `不显示${weightValue}级以下`;
+        formatWeightThreshold(weightValue);
 
     const youtubeMatchThreshold = document.getElementById('youtube-match-threshold');
     const youtubeMatchThresholdValue = document.getElementById('youtube-match-threshold-value');
     if (youtubeMatchThreshold && youtubeMatchThresholdValue) {
         youtubeMatchThresholdValue.textContent = `${youtubeMatchThreshold.value}%`;
     }
+    syncAllRangeFills();
+    updateAutoMatchControls();
 }
 
 // 下载弹幕
@@ -897,7 +1107,7 @@ function updateManualInputUI(hasData, bilibiliUrl = '', noMatchData = null) {
     const spaceBtn = document.getElementById('view-bilibili-space-btn');
 
     if (noMatchData?.matchMode === 'title-search') {
-        label.textContent = '未匹配到B站视频，可搜索标题或输入视频链接';
+        label.textContent = '未匹配到 B 站视频，可搜索标题或粘贴链接';
         viewBtn.style.display = 'none';
         spaceBtn.style.display = 'none';
         viewBtn.onclick = null;
@@ -915,22 +1125,22 @@ function updateManualInputUI(hasData, bilibiliUrl = '', noMatchData = null) {
         }
     } else if (noMatchData) {
         // 未匹配状态：显示提示和B站空间按钮
-        label.textContent = '未匹配到B站视频，请手动输入视频链接';
+        label.textContent = '未匹配到 B 站视频，请粘贴视频链接';
         viewBtn.style.display = 'none';
-        spaceBtn.style.display = 'block';
-        spaceBtn.textContent = `查看 ${noMatchData.channelInfo.channelName} 的B站空间`;
+        spaceBtn.style.display = 'inline-flex';
+        spaceBtn.textContent = `查看 ${noMatchData.channelInfo.channelName} 的 B 站空间`;
         viewBtn.onclick = null;
         spaceBtn.onclick = () => openBilibiliSpace(noMatchData);
     } else if (hasData && bilibiliUrl) {
         // 有数据状态：显示已匹配视频
-        label.textContent = '已匹配到B站视频，输入链接可手动匹配';
-        viewBtn.style.display = 'block';
+        label.textContent = '已匹配 B 站视频，粘贴链接可重新匹配';
+        viewBtn.style.display = 'inline-flex';
         spaceBtn.style.display = 'none';
         viewBtn.onclick = () => openBilibiliVideo(bilibiliUrl);
         spaceBtn.onclick = null;
     } else {
         // 默认状态：显示手动输入提示
-        label.textContent = '或手动输入B站视频链接：';
+        label.textContent = '粘贴 B 站视频链接';
         viewBtn.style.display = 'none';
         spaceBtn.style.display = 'none';
         viewBtn.onclick = null;
@@ -967,16 +1177,21 @@ async function openBilibiliSpace(noMatchData) {
 }
 
 // 显示弹幕列表
+let renderYouTubeDanmakuList = null;
+
 function displayDanmakuList(danmakus) {
     const container = document.getElementById('danmaku-list-container');
     const list = document.getElementById('danmaku-list');
+    const countChip = document.getElementById('danmaku-list-count');
 
     if (!danmakus || danmakus.length === 0) {
         container.classList.remove('show');
+        renderYouTubeDanmakuList = null;
         return;
     }
 
     container.classList.add('show');
+    if (countChip) countChip.textContent = String(danmakus.length);
 
     // 格式化时间
     const formatTime = (seconds) => {
@@ -1001,31 +1216,40 @@ function displayDanmakuList(danmakus) {
         `
             )
             .join('');
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="danmaku-empty">没有匹配的弹幕</div>';
+        }
     };
 
-    renderList();
-
-    // 搜索功能
+    // 搜索与点击只绑定一次，渲染函数随最新数据更新（避免重复监听）
+    renderYouTubeDanmakuList = renderList;
     const searchInput = document.getElementById('danmaku-search');
-    searchInput.addEventListener('input', (e) => {
-        renderList(e.target.value);
-    });
+    renderList(searchInput?.value || '');
 
-    // 点击跳转功能
-    list.addEventListener('click', async (e) => {
-        const item = e.target.closest('.danmaku-item');
-        if (!item) return;
+    if (searchInput && !searchInput.hasAttribute('data-bound')) {
+        searchInput.setAttribute('data-bound', 'true');
+        searchInput.addEventListener('input', (e) => {
+            renderYouTubeDanmakuList?.(e.target.value);
+        });
+    }
 
-        const time = parseFloat(item.dataset.time);
-        const tab = await getCurrentTab();
+    if (!list.hasAttribute('data-bound')) {
+        list.setAttribute('data-bound', 'true');
+        list.addEventListener('click', async (e) => {
+            const item = e.target.closest('.danmaku-item');
+            if (!item) return;
 
-        if (tab && tab.url.includes('youtube.com')) {
-            browser.tabs.sendMessage(tab.id, {
-                type: 'seekToTime',
-                time: time
-            });
-        }
-    });
+            const time = parseFloat(item.dataset.time);
+            const tab = await getCurrentTab();
+
+            if (tab && tab.url.includes('youtube.com')) {
+                browser.tabs.sendMessage(tab.id, {
+                    type: 'seekToTime',
+                    time: time
+                });
+            }
+        });
+    }
 }
 
 // 获取YouTube页面信息（增强版）
@@ -1153,6 +1377,14 @@ async function smartSearchAndAssociate() {
     }
 }
 
+// 让 role="button" 的搜索结果支持键盘（Enter / 空格）
+document.addEventListener('keydown', (event) => {
+    const item = event.target?.closest?.('.search-item[role="button"]');
+    if (!item || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    item.click();
+});
+
 // 显示UP主搜索结果
 function displayUserSearchResults(users, pageInfo) {
     const searchResults = document.getElementById('search-results');
@@ -1160,21 +1392,22 @@ function displayUserSearchResults(users, pageInfo) {
     const searchList = document.getElementById('search-list');
 
     searchResults.style.display = 'block';
-    searchStatus.textContent = `找到${users.length}个可能的UP主，请选择：`;
+    searchStatus.textContent = `找到 ${users.length} 个可能的 UP 主，请选择：`;
+    showStatus('请选择对应的 B 站 UP 主', 'info');
 
     searchList.innerHTML = users
         .map(
             (user) => `
-        <div class="search-item user-item" data-mid="${user.mid}" data-space-url="${user.spaceUrl}">
+        <div class="search-item user-item" role="button" tabindex="0" data-mid="${escapeHtml(user.mid)}" data-space-url="${escapeHtml(user.spaceUrl)}">
             <div class="search-item-cover">
-                <img src="${user.face.startsWith('https:') ? user.face : 'https:' + user.face}" alt="${user.uname}" onerror="this.style.display='none'">
+                <img src="${escapeHtml(String(user.face || '').startsWith('https:') ? user.face : 'https:' + (user.face || ''))}" alt="" onerror="this.style.display='none'">
             </div>
             <div class="search-item-content">
-                <div class="search-item-title">${user.uname}</div>
+                <div class="search-item-title">${escapeHtml(stripHtml(user.uname))}</div>
                 <div class="search-item-info">
-                    ${user.fans > 10000 ? (user.fans / 10000).toFixed(1) + '万' : user.fans} 粉丝 · ${user.videos} 个视频
+                    ${user.fans > 10000 ? (user.fans / 10000).toFixed(1) + '万' : escapeHtml(user.fans)} 粉丝 · ${escapeHtml(user.videos)} 个视频
                 </div>
-                ${user.usign ? `<div class="search-item-info">${user.usign}</div>` : ''}
+                ${user.usign ? `<div class="search-item-info">${escapeHtml(stripHtml(user.usign))}</div>` : ''}
             </div>
         </div>
     `
@@ -1203,10 +1436,14 @@ function displayUserSearchResults(users, pageInfo) {
                 searchResults.style.display = 'none';
                 checkAssociation(pageInfo.channel.channelId);
 
-                // 关联成功后自动搜索弹幕
-                setTimeout(() => {
-                    autoSearchDanmaku(true);
-                }, 500);
+                // 关联成功后自动搜索弹幕（关闭“按标题自动匹配”时不自动发送标题搜索）
+                if (isAutoMatchByTitleEnabled()) {
+                    setTimeout(() => {
+                        autoSearchDanmaku(true);
+                    }, 500);
+                } else {
+                    showStatus('关联成功，已关闭自动匹配，可手动搜索视频', 'success');
+                }
             } else {
                 showStatus('关联失败', 'error');
             }
@@ -1221,18 +1458,19 @@ function displayVideoSearchResults(videos, youtubeVideoId) {
     const searchList = document.getElementById('search-list');
 
     searchResults.style.display = 'block';
-    searchStatus.textContent = `找到${videos.length}个相关视频：`;
+    searchStatus.textContent = `找到 ${videos.length} 个相关视频：`;
+    showStatus('请选择对应的 B 站视频', 'info');
 
     searchList.innerHTML = videos
         .map(
             (video) => `
-        <div class="search-item video-item" data-bvid="${video.bvid}" data-mid="${video.mid}" data-author="${video.author}">
+        <div class="search-item video-item" role="button" tabindex="0" data-bvid="${escapeHtml(video.bvid)}" data-mid="${escapeHtml(video.mid)}" data-author="${escapeHtml(stripHtml(video.author))}">
             <div class="search-item-cover">
-                <img src="${video.pic}" alt="${video.title}" onerror="this.style.display='none'">
+                <img src="${escapeHtml(normalizeBilibiliImageUrl(video.pic || ''))}" alt="" onerror="this.style.display='none'">
             </div>
             <div class="search-item-content">
-                <div class="search-item-title">${video.title}</div>
-                <div class="search-item-info">UP主: ${video.author} · ${video.pubdate}</div>
+                <div class="search-item-title">${escapeHtml(stripHtml(video.title))}</div>
+                <div class="search-item-info">UP：${escapeHtml(stripHtml(video.author))} · ${escapeHtml(video.pubdate)}</div>
             </div>
         </div>
     `
@@ -1562,17 +1800,17 @@ function displaySearchResults(results, youtubeVideoId, noMatchData = null, optio
             buildYouTubeMatchInfo(currentYouTubeSearchResults[0], options.source || 'legacy-auto')
         );
     } else {
-        searchStatus.textContent = `找到${currentYouTubeSearchResults.length}个匹配视频，请选择：`;
+        searchStatus.textContent = `找到 ${currentYouTubeSearchResults.length} 个匹配视频，请选择：`;
         searchList.innerHTML = currentYouTubeSearchResults
             .map(
                 (video, index) => `
-            <div class="search-item ${video.bvid === currentYouTubeSelectedBvid ? 'current-selection' : ''}" data-bvid="${escapeHtml(video.bvid)}" data-index="${index}">
+            <div class="search-item ${video.bvid === currentYouTubeSelectedBvid ? 'current-selection' : ''}" role="button" tabindex="0" data-bvid="${escapeHtml(video.bvid)}" data-index="${index}">
                 <div class="search-item-media">
                     <div class="search-item-cover">
                         <img src="${escapeHtml(normalizeBilibiliImageUrl(video.pic || ''))}" alt="视频封面" onerror="this.style.display='none'">
                         ${
                             video.bvid === currentYouTubeSelectedBvid
-                                ? '<div class="search-selection-check">✓</div>'
+                                ? `<div class="search-selection-check">${checkIconHtml}</div>`
                                 : ''
                         }
                     </div>
@@ -1583,9 +1821,11 @@ function displaySearchResults(results, youtubeVideoId, noMatchData = null, optio
                     }
                 </div>
                 <div class="search-item-content">
-                    <div class="search-item-title">${escapeHtml(video.title)}</div>
-                    <div class="search-item-info">
-                        UP: ${escapeHtml(video.author || '未知')} · ${escapeHtml(video.duration || '未知时长')} · 匹配${Math.round((video.highlightRatio || 0) * 100)}% · 弹幕${getSearchResultDanmakuCount(video)}
+                    <div class="search-item-title">${escapeHtml(stripHtml(video.title))}</div>
+                    <div class="search-item-info">UP：${escapeHtml(stripHtml(video.author || '未知'))}${video.duration ? ` · ${escapeHtml(video.duration)}` : ''}</div>
+                    <div class="search-item-chips">
+                        <span class="chip chip-blue">匹配 ${Math.round((video.highlightRatio || 0) * 100)}%</span>
+                        <span class="chip chip-muted">弹幕 ${getSearchResultDanmakuCount(video)}</span>
                     </div>
                 </div>
             </div>
@@ -1604,8 +1844,7 @@ function displaySearchResults(results, youtubeVideoId, noMatchData = null, optio
                 // 禁用其他选项
                 searchList.querySelectorAll('.search-item').forEach((otherItem) => {
                     if (otherItem !== item) {
-                        otherItem.style.opacity = '0.3';
-                        otherItem.style.pointerEvents = 'none';
+                        otherItem.classList.add('is-dimmed');
                     }
                 });
 
@@ -1628,6 +1867,8 @@ function displaySearchResults(results, youtubeVideoId, noMatchData = null, optio
 
 async function searchYouTubeTitleDanmaku(options = {}) {
     const { autoHandle = false, silent = false } = options;
+    const searchBtn = document.getElementById('youtube-search-btn');
+    const searchStatus = document.getElementById('search-status');
 
     try {
         const tab = await getCurrentTab();
@@ -1652,6 +1893,11 @@ async function searchYouTubeTitleDanmaku(options = {}) {
         }
 
         if (!silent) showStatus('正在搜索B站视频...', 'loading');
+        if (searchBtn) {
+            searchBtn.disabled = true;
+            searchBtn.textContent = '搜索中';
+        }
+        if (searchStatus) searchStatus.textContent = `正在搜索「${keyword}」…`;
 
         const searchResponse = await browser.runtime.sendMessage({
             type: 'searchBilibiliVideoAllV2',
@@ -1667,7 +1913,8 @@ async function searchYouTubeTitleDanmaku(options = {}) {
                 matchMode: 'title-search'
             };
 
-            if (autoHandle && results.length > 0) {
+            // 仅在开启“按标题自动匹配”时自动下载；否则只展示结果供用户选择
+            if (autoHandle && results.length > 0 && isAutoMatchByTitleEnabled()) {
                 const settingsResult = await browser.storage.local.get('danmakuSettings');
                 const settings = settingsResult.danmakuSettings || {};
                 const matchThreshold = (settings.youtubeMatchThreshold || 90) / 100;
@@ -1704,12 +1951,19 @@ async function searchYouTubeTitleDanmaku(options = {}) {
             return true;
         }
 
+        if (searchStatus) searchStatus.textContent = '搜索失败，请稍后重试';
         if (!silent) showStatus(searchResponse.error || '搜索失败', 'error');
         return false;
     } catch (error) {
         console.error('YouTube 标题搜索失败:', error);
+        if (searchStatus) searchStatus.textContent = '搜索失败，请稍后重试';
         if (!silent) showStatus('搜索失败：' + error.message, 'error');
         return false;
+    } finally {
+        if (searchBtn) {
+            searchBtn.disabled = false;
+            searchBtn.textContent = '搜索';
+        }
     }
 }
 
@@ -1738,6 +1992,7 @@ async function checkPendingSearchResults() {
 
             // 显示相关信息
             showStatus(`找到 ${pendingResults.results.length} 个匹配的B站视频，请选择：`, 'info');
+            showBanner(`找到 ${pendingResults.results.length} 个候选视频，请在下方选择`, 'info');
 
             // 清理已显示的结果
             await browser.runtime
@@ -1784,6 +2039,7 @@ async function checkPendingNoMatchResults() {
                     : '未找到匹配的B站视频，请手动输入或查看B站空间',
                 'info'
             );
+            showNoMatchBanner(pendingNoMatchResults.matchMode);
 
             // 清理已显示的结果
             await browser.runtime
@@ -1801,6 +2057,15 @@ async function checkPendingNoMatchResults() {
         console.error('检查待显示未匹配结果失败:', error);
         return false;
     }
+}
+
+function showNoMatchBanner(matchMode) {
+    showBanner(
+        matchMode === 'title-search'
+            ? '未找到匹配的 B 站视频，可搜索标题或粘贴链接'
+            : '未找到匹配的 B 站视频，可粘贴链接或查看 UP 主空间',
+        'warn'
+    );
 }
 
 // 解析番剧标题和集数
@@ -1834,18 +2099,18 @@ function displayBangumiInterface(pageInfo) {
 
     const bangumiSection = document.createElement('div');
     bangumiSection.id = 'bangumi-section';
-    bangumiSection.className = 'association-section';
+    bangumiSection.className = 'card bangumi-card';
 
     if (parseResult.isValid) {
         // 解析成功：显示完整信息和更新按钮
         bangumiSection.innerHTML = `
-            <div class="association-header">
-                <h3>BillBili 原创番剧-《${parseResult.title}》-第${parseResult.episode}话</h3>
-            </div>
-            <div class="input-group">
-                <div class="button-group">
-                    <button id="update-bangumi-btn" style="background-color: #fb7299;">更新弹幕</button>
-                </div>
+            <div class="row">
+                <span class="icon-tile tint-pink"><svg class="icon"><use href="#i-play" /></svg></span>
+                <span class="row-text">
+                    <span class="row-title">B 站原创番剧</span>
+                    <span class="row-detail">《${escapeHtml(parseResult.title)}》第 ${parseResult.episode} 话</span>
+                </span>
+                <button type="button" id="update-bangumi-btn" class="btn btn-pink btn-sm">更新弹幕</button>
             </div>
         `;
 
@@ -1857,19 +2122,15 @@ function displayBangumiInterface(pageInfo) {
         const updateButton = document.getElementById('update-bangumi-btn');
         updateButton.onclick = () =>
             downloadBangumiDanmakuFromUI(parseResult.title, parseResult.episode, pageInfo.videoId);
-
-        // 添加悬停效果
-        updateButton.onmouseenter = () => {
-            updateButton.style.backgroundColor = '#f25d8e';
-        };
-        updateButton.onmouseleave = () => {
-            updateButton.style.backgroundColor = '#fb7299';
-        };
     } else {
         // 解析失败：只显示标题，无按钮
         bangumiSection.innerHTML = `
-            <div class="association-header">
-                <h3>未识别到番剧正片</h3>
+            <div class="row">
+                <span class="icon-tile tint-amber"><svg class="icon"><use href="#i-alert" /></svg></span>
+                <span class="row-text">
+                    <span class="row-title">未识别到番剧正片</span>
+                    <span class="row-detail">标题需为「《番名》第 N 话：」格式</span>
+                </span>
             </div>
         `;
 
@@ -2070,6 +2331,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     matchMode: request.data.matchMode || 'legacy'
                 });
                 showStatus(`找到 ${request.data.results.length} 个匹配的B站视频，请选择：`, 'info');
+                showBanner(`找到 ${request.data.results.length} 个候选视频，请在下方选择`, 'info');
             };
 
             if (document.readyState === 'loading') {
@@ -2103,6 +2365,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         : '未找到匹配的B站视频，请手动输入或查看B站空间',
                     'info'
                 );
+                showNoMatchBanner(request.data.matchMode);
             };
 
             if (document.readyState === 'loading') {
@@ -2186,25 +2449,35 @@ function bindYouTubeUIEvents() {
     const manualMatchBtn = document.getElementById('youtube-manual-match-btn');
     if (manualMatchBtn && !manualMatchBtn.hasAttribute('data-bound')) {
         manualMatchBtn.setAttribute('data-bound', 'true');
+        // 重新匹配：保留当前匹配卡片，展开搜索与链接输入
         manualMatchBtn.addEventListener('click', async () => {
-            hideYouTubeMatchedVideo();
             setYouTubeManualInputVisible(true);
-            const pageInfo = await getPageInfo();
-            updateYouTubeSearchInput(pageInfo?.videoTitle);
-            const searchResults = document.getElementById('search-results');
-            const searchStatus = document.getElementById('search-status');
-            if (searchResults) searchResults.style.display = 'block';
-            if (searchStatus && !searchStatus.textContent) {
-                searchStatus.textContent = '按当前标题搜索 B 站视频';
-            }
-            document.getElementById('bilibili-url')?.focus();
+            await openYouTubeSearchPanel();
+        });
+    }
+
+    const qaSearchBtn = document.getElementById('qa-search-btn');
+    if (qaSearchBtn && !qaSearchBtn.hasAttribute('data-bound')) {
+        qaSearchBtn.setAttribute('data-bound', 'true');
+        qaSearchBtn.addEventListener('click', () => openYouTubeSearchPanel());
+    }
+
+    const qaLinkBtn = document.getElementById('qa-link-btn');
+    if (qaLinkBtn && !qaLinkBtn.hasAttribute('data-bound')) {
+        qaLinkBtn.setAttribute('data-bound', 'true');
+        qaLinkBtn.addEventListener('click', () => {
+            setYouTubeManualInputVisible(true);
+            const urlInput = document.getElementById('bilibili-url');
+            urlInput?.closest('.card')?.scrollIntoView({ block: 'nearest' });
+            urlInput?.focus();
         });
     }
 
     const searchBtn = document.getElementById('youtube-search-btn');
     if (searchBtn && !searchBtn.hasAttribute('data-bound')) {
         searchBtn.setAttribute('data-bound', 'true');
-        searchBtn.addEventListener('click', searchYouTubeTitleDanmaku);
+        // 仅在用户点击时搜索（不把点击事件当作 options 传入）
+        searchBtn.addEventListener('click', () => searchYouTubeTitleDanmaku());
     }
 
     const searchInput = document.getElementById('youtube-search-input');
@@ -2241,6 +2514,24 @@ function bindYouTubeUIEvents() {
             saveSettings();
         });
     });
+}
+
+// 展开搜索面板（只预填标题，不自动发起搜索）
+async function openYouTubeSearchPanel() {
+    const searchResults = document.getElementById('search-results');
+    const searchStatus = document.getElementById('search-status');
+    const searchInput = document.getElementById('youtube-search-input');
+    if (searchResults) searchResults.style.display = 'block';
+    if (searchStatus && !searchStatus.textContent) {
+        searchStatus.textContent = '确认关键词后点击搜索';
+    }
+    if (searchInput && !searchInput.value) {
+        const pageInfo = await getPageInfo();
+        updateYouTubeSearchInput(pageInfo?.videoTitle);
+    }
+    searchResults?.scrollIntoView({ block: 'nearest' });
+    searchInput?.focus();
+    searchInput?.select();
 }
 
 // 检查页面类型并切换界面
@@ -2314,11 +2605,30 @@ function bindQuarkUIEvents() {
     const manualMatchBtn = document.getElementById('quark-manual-match-btn');
     if (manualMatchBtn && !manualMatchBtn.hasAttribute('data-bound')) {
         manualMatchBtn.setAttribute('data-bound', 'true');
+        // 重新匹配：保留当前匹配卡片，展开链接输入
         manualMatchBtn.addEventListener('click', () => {
-            hideQuarkMatchedVideo();
             setQuarkManualInputVisible(true);
-            document.getElementById('quark-bilibili-url')?.focus();
+            const urlInput = document.getElementById('quark-bilibili-url');
+            urlInput?.closest('.card')?.scrollIntoView({ block: 'nearest' });
+            urlInput?.focus();
         });
+    }
+
+    const quarkLinkBtn = document.getElementById('quark-qa-link-btn');
+    if (quarkLinkBtn && !quarkLinkBtn.hasAttribute('data-bound')) {
+        quarkLinkBtn.setAttribute('data-bound', 'true');
+        quarkLinkBtn.addEventListener('click', () => {
+            setQuarkManualInputVisible(true);
+            const urlInput = document.getElementById('quark-bilibili-url');
+            urlInput?.closest('.card')?.scrollIntoView({ block: 'nearest' });
+            urlInput?.focus();
+        });
+    }
+
+    const quarkEnableEl = document.getElementById('quark-enable-danmaku');
+    if (quarkEnableEl && !quarkEnableEl.hasAttribute('data-header-bound')) {
+        quarkEnableEl.setAttribute('data-header-bound', 'true');
+        quarkEnableEl.addEventListener('change', () => renderHeaderBase('quark'));
     }
 
     // 设置变更事件
@@ -2329,7 +2639,8 @@ function bindQuarkUIEvents() {
         'quark-speed',
         'quark-track-spacing',
         'quark-filter-level',
-        'quark-match-threshold'
+        'quark-match-threshold',
+        'quark-scale-with-player'
     ];
     settingIds.forEach((id) => {
         const el = document.getElementById(id);
@@ -2410,6 +2721,7 @@ function bindQuarkUIEvents() {
             // 同步滑块（滑块有范围限制）
             if (timeOffsetSlider) {
                 timeOffsetSlider.value = Math.max(-60, Math.min(60, value));
+                syncRangeFill(timeOffsetSlider);
             }
             saveQuarkSettings();
         });
@@ -2435,21 +2747,23 @@ function updateQuarkSliderValues() {
         document.getElementById('quark-font-size-value').textContent = fontSizeEl.value + 'px';
     }
     if (speedEl) {
-        document.getElementById('quark-speed-value').textContent = speedEl.value + 'x';
+        document.getElementById('quark-speed-value').textContent =
+            Number(speedEl.value).toFixed(1) + 'x';
     }
     if (trackSpacingEl) {
         document.getElementById('quark-track-spacing-value').textContent =
             trackSpacingEl.value + 'px';
     }
     if (filterLevelEl) {
-        const level = parseInt(filterLevelEl.value);
-        const text = level === 0 ? '0（显示全部）' : `不显示${level}级以下`;
-        document.getElementById('quark-filter-level-value').textContent = text;
+        document.getElementById('quark-filter-level-value').textContent = formatWeightThreshold(
+            filterLevelEl.value
+        );
     }
     if (matchThresholdEl) {
         document.getElementById('quark-match-threshold-value').textContent =
             matchThresholdEl.value + '%';
     }
+    syncAllRangeFills();
 }
 
 // 保存 Quark 设置
@@ -2483,7 +2797,8 @@ async function saveQuarkSettings() {
         weightThreshold: parseInt(document.getElementById('quark-filter-level')?.value) || 0,
         autoDownload: document.getElementById('quark-auto-download')?.checked ?? false,
         matchThreshold: parseInt(document.getElementById('quark-match-threshold')?.value) || 90,
-        multiMatchMode: multiMatchMode
+        multiMatchMode: multiMatchMode,
+        scaleWithPlayer: document.getElementById('quark-scale-with-player')?.checked ?? true
     };
 
     await browser.storage.local.set({ danmakuSettings: settings });
@@ -2513,13 +2828,16 @@ async function loadQuarkSettings() {
         weightThreshold: 0,
         autoDownload: false,
         matchThreshold: 90,
-        multiMatchMode: 'mostDanmaku'
+        multiMatchMode: 'mostDanmaku',
+        scaleWithPlayer: true
     };
     const settings = {
         ...defaultSettings,
         ...(result.danmakuSettings || {})
     };
 
+    const scaleEl = document.getElementById('quark-scale-with-player');
+    if (scaleEl) scaleEl.checked = settings.scaleWithPlayer !== false;
     const enableEl = document.getElementById('quark-enable-danmaku');
     const opacityEl = document.getElementById('quark-opacity');
     const fontSizeEl = document.getElementById('quark-font-size');
@@ -2566,21 +2884,23 @@ async function loadQuarkSettings() {
     });
 
     updateQuarkSliderValues();
+    if (!isHeaderFlashing('quark')) renderHeaderBase('quark');
 }
 
 // 显示 Quark 状态信息
 function showQuarkStatus(message, type = 'loading') {
-    const statusBar = document.getElementById('quark-status-bar');
-    if (!statusBar) return;
+    flashHeaderStatus('quark', message, type);
+    showToast(document.getElementById('quark-status-bar'), message, type);
+}
 
-    statusBar.textContent = message;
-    statusBar.className = `status-bar show ${type}`;
-
-    if (type !== 'loading') {
-        setTimeout(() => {
-            statusBar.classList.remove('show');
-        }, 3000);
+function updateQuarkDanmakuInfo(count) {
+    const danmakuInfo = document.getElementById('quark-danmaku-info');
+    headerState.quark.count = count > 0 ? count : 0;
+    if (danmakuInfo) {
+        danmakuInfo.textContent = `${count} 条弹幕`;
+        danmakuInfo.classList.toggle('show', count > 0);
     }
+    if (!isHeaderFlashing('quark')) renderHeaderBase('quark');
 }
 
 // 下载 Quark 弹幕
@@ -2648,11 +2968,7 @@ async function downloadQuarkDanmaku() {
             showQuarkStatus(`成功下载 ${response.count} 条弹幕`, 'success');
 
             // 更新弹幕信息显示
-            const danmakuInfo = document.getElementById('quark-danmaku-info');
-            if (danmakuInfo) {
-                danmakuInfo.textContent = `已加载 ${response.count} 条弹幕`;
-                danmakuInfo.classList.add('show');
-            }
+            updateQuarkDanmakuInfo(response.count);
 
             // 显示弹幕列表
             const storageKey = `quark_${quarkVideoId}`;
@@ -2740,11 +3056,7 @@ async function importQuarkDanmakuFromXml() {
             showQuarkStatus(`成功导入 ${danmakus.length} 条弹幕`, 'success');
 
             // 更新弹幕信息显示
-            const danmakuInfo = document.getElementById('quark-danmaku-info');
-            if (danmakuInfo) {
-                danmakuInfo.textContent = `已加载 ${danmakus.length} 条弹幕（本地导入）`;
-                danmakuInfo.classList.add('show');
-            }
+            updateQuarkDanmakuInfo(danmakus.length);
 
             // 显示弹幕列表
             renderQuarkMatchedVideo(storageData[storageKey]);
@@ -2805,7 +3117,7 @@ function parseBilibiliXmlDanmaku(xmlText) {
             time: time,
             text: text,
             color: `#${color.toString(16).padStart(6, '0')}`,
-            mode: mode === 4 ? 'bottom' : mode === 5 ? 'top' : 'rtl',
+            mode: mode === 4 ? 'bottom' : mode === 5 ? 'top' : mode >= 7 ? 'special' : 'rtl',
             weight: 5
         });
     }
@@ -2817,6 +3129,8 @@ function parseBilibiliXmlDanmaku(xmlText) {
 }
 
 // 显示 Quark 弹幕列表
+let renderQuarkDanmakuList = null;
+
 function displayQuarkDanmakuList(danmakus) {
     const container = document.getElementById('quark-danmaku-list-container');
     const list = document.getElementById('quark-danmaku-list');
@@ -2825,6 +3139,7 @@ function displayQuarkDanmakuList(danmakus) {
 
     if (!danmakus || danmakus.length === 0) {
         container.classList.remove('show');
+        renderQuarkDanmakuList = null;
         return;
     }
 
@@ -2853,16 +3168,21 @@ function displayQuarkDanmakuList(danmakus) {
         `
             )
             .join('');
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="danmaku-empty">没有匹配的弹幕</div>';
+        }
     };
 
-    renderList();
+    // 渲染函数随最新数据更新，避免搜索仍使用旧的弹幕数组
+    renderQuarkDanmakuList = renderList;
+    const searchInput = document.getElementById('quark-danmaku-search');
+    renderList(searchInput?.value || '');
 
     // 搜索功能
-    const searchInput = document.getElementById('quark-danmaku-search');
     if (searchInput && !searchInput.hasAttribute('data-bound')) {
         searchInput.setAttribute('data-bound', 'true');
         searchInput.addEventListener('input', (e) => {
-            renderList(e.target.value);
+            renderQuarkDanmakuList?.(e.target.value);
         });
     }
 
@@ -2904,11 +3224,7 @@ async function checkQuarkDanmaku() {
         renderQuarkMatchedVideo(data);
 
         // 显示已加载的弹幕信息
-        const danmakuInfo = document.getElementById('quark-danmaku-info');
-        if (danmakuInfo) {
-            danmakuInfo.textContent = `已加载 ${data.danmakus.length} 条弹幕`;
-            danmakuInfo.classList.add('show');
-        }
+        updateQuarkDanmakuInfo(data.danmakus.length);
 
         // 显示弹幕列表
         displayQuarkDanmakuList(data.danmakus);
@@ -2941,24 +3257,24 @@ function showPageInfoRefreshButton() {
     // 检查是否已经有刷新按钮
     if (document.getElementById('refresh-page-info-btn')) return;
 
-    channelInfoDiv.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <p style="color: #666; margin-bottom: 10px;">无法获取当前页面信息</p>
-            <button id="refresh-page-info-btn" style="
-                background-color: #ff4444; 
-                color: white; 
-                border: none; 
-                padding: 8px 16px; 
-                border-radius: 4px; 
-                cursor: pointer;
-            ">刷新页面信息</button>
-        </div>
+    // 不替换 channel-info 的内容（保留头像/名称等元素供后续刷新使用）
+    const channelHeader = channelInfoDiv.querySelector('.channel-header');
+    if (channelHeader) channelHeader.style.display = 'none';
+
+    const errorBox = document.createElement('div');
+    errorBox.className = 'channel-error';
+    errorBox.innerHTML = `
+        <span>无法获取当前页面信息</span>
+        <button type="button" id="refresh-page-info-btn" class="btn btn-tonal btn-sm">
+            <svg class="icon"><use href="#i-refresh" /></svg>刷新页面信息
+        </button>
     `;
+    channelInfoDiv.appendChild(errorBox);
 
     // 绑定刷新事件
     document.getElementById('refresh-page-info-btn').addEventListener('click', async () => {
         const button = document.getElementById('refresh-page-info-btn');
-        const originalText = button.textContent;
+        const originalHtml = button.innerHTML;
 
         button.textContent = '刷新中...';
         button.disabled = true;
@@ -2968,17 +3284,20 @@ function showPageInfoRefreshButton() {
             const pageInfo = await getPageInfo(false);
 
             if (pageInfo) {
+                errorBox.remove();
+                if (channelHeader) channelHeader.style.display = '';
+                channelInfoDiv.style.display = 'none';
                 displayChannelInfo(pageInfo);
                 showStatus('页面信息已刷新', 'success');
             } else {
                 showStatus('仍无法获取页面信息，请稍后重试', 'error');
-                button.textContent = originalText;
+                button.innerHTML = originalHtml;
                 button.disabled = false;
             }
         } catch (error) {
             console.error('刷新页面信息失败:', error);
             showStatus('刷新失败: ' + error.message, 'error');
-            button.textContent = originalText;
+            button.innerHTML = originalHtml;
             button.disabled = false;
         }
     });
@@ -2993,6 +3312,8 @@ function openYouTube() {
 
 // 初始化
 document.addEventListener('DOMContentLoaded', async () => {
+    initCollapsibleSections();
+
     // 首先检查页面类型并切换界面
     const pageType = await checkPageTypeAndToggleUI();
 
@@ -3018,6 +3339,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindYouTubeUIEvents();
     bindTimelineRateUI('', saveSettings);
     attachToggleAnimationHandlers(document.getElementById('enable-danmaku'));
+    attachToggleAnimationHandlers(document.getElementById('auto-match-title'));
+    attachToggleAnimationHandlers(document.getElementById('scale-with-player'));
     await checkCurrentPageDanmaku();
 
     // 获取并显示页面信息
@@ -3043,7 +3366,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('smart-search-btn').addEventListener('click', smartSearchAndAssociate);
 
     // 设置变更事件
-    document.getElementById('enable-danmaku').addEventListener('change', saveSettings);
+    document.getElementById('enable-danmaku').addEventListener('change', () => {
+        renderHeaderBase('main');
+        saveSettings();
+    });
+    document.getElementById('auto-match-title')?.addEventListener('change', () => {
+        updateAutoMatchControls();
+        saveSettings();
+    });
+    document.getElementById('scale-with-player')?.addEventListener('change', saveSettings);
     document.getElementById('youtube-match-threshold').addEventListener('input', () => {
         updateSliderValues();
         saveSettings();

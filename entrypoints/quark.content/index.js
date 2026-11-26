@@ -34,6 +34,33 @@ export default defineContentScript({
         let fullscreenChangeHandler = null;
         let cachedSelectedBvid = null;
 
+        const QB_ICON_ATTRS =
+            'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+        const QB_ICONS = {
+            check: `<svg class="qb-icon" ${QB_ICON_ATTRS}><path d="M20 6L9 17l-5-5"/></svg>`,
+            close: `<svg class="qb-icon" ${QB_ICON_ATTRS}><path d="M18 6L6 18M6 6l12 12"/></svg>`,
+            search: `<svg class="qb-icon" ${QB_ICON_ATTRS}><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5l-4.35-4.35"/></svg>`,
+            alert: `<svg class="qb-icon" ${QB_ICON_ATTRS}><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>`
+        };
+
+        function qbStateHtml(type, text) {
+            const icon =
+                type === 'loading'
+                    ? '<span class="qb-loading-spinner"></span>'
+                    : type === 'error'
+                      ? QB_ICONS.alert
+                      : QB_ICONS.search;
+            return `<div class="qb-popover-${type}">${icon}<span>${text}</span></div>`;
+        }
+
+        function qbEscape(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
         // ==================== B站弹幕按钮和浮窗相关函数 ====================
 
         // 清理夸克视频标题（去掉后缀、日期前缀等）
@@ -137,10 +164,13 @@ export default defineContentScript({
             popover.innerHTML = `
                 <div class="qb-popover-arrow"></div>
                 <div class="qb-popover-header">
+                    <span class="qb-popover-brand" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="19" height="13.5" rx="3"/><path d="M8 2.5l4 4 4-4"/><path d="M9 12.5v3M15 12.5v3"/></svg>
+                    </span>
                     <span class="qb-popover-header-title">B站弹幕</span>
                     <div class="qb-popover-search">
-                        <input type="text" id="qb-search-input" placeholder="搜索关键词..." />
-                        <button id="qb-search-btn" title="搜索">
+                        <input type="text" id="qb-search-input" placeholder="搜索 B 站视频" autocomplete="off" />
+                        <button type="button" id="qb-search-btn" title="搜索" aria-label="搜索">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -149,7 +179,7 @@ export default defineContentScript({
                     </div>
                 </div>
                 <div class="qb-popover-content" id="qb-popover-content">
-                    <div class="qb-popover-loading">正在搜索...</div>
+                    <div class="qb-popover-loading"><span class="qb-loading-spinner"></span><span>正在搜索...</span></div>
                 </div>
             `;
 
@@ -218,8 +248,7 @@ export default defineContentScript({
 
                 cachedSearchKeyword = keyword;
                 const content = document.getElementById('qb-popover-content');
-                content.innerHTML =
-                    '<div class="qb-popover-loading"><span class="qb-loading-spinner"></span>正在搜索...</div>';
+                content.innerHTML = qbStateHtml('loading', '正在搜索...');
 
                 try {
                     const response = await browser.runtime.sendMessage({
@@ -234,11 +263,11 @@ export default defineContentScript({
                         await refreshSelectedBvidForCurrentVideo();
                         renderSearchResults(response.results);
                     } else {
-                        content.innerHTML = '<div class="qb-popover-empty">未找到相关视频</div>';
+                        content.innerHTML = qbStateHtml('empty', '未找到相关视频，换个关键词试试');
                     }
                 } catch (error) {
                     console.error('[Quark] 搜索失败:', error);
-                    content.innerHTML = '<div class="qb-popover-error">搜索失败</div>';
+                    content.innerHTML = qbStateHtml('error', '搜索失败，请稍后重试');
                 }
             };
 
@@ -292,7 +321,7 @@ export default defineContentScript({
 
         function getSelectionMarkerHtml(isCurrentSelection) {
             if (!isCurrentSelection) return '';
-            return '<div class="qb-popover-selection-check">✓</div>';
+            return `<div class="qb-popover-selection-check">${QB_ICONS.check}</div>`;
         }
 
         function getSelectionLabelHtml(isCurrentSelection) {
@@ -384,7 +413,11 @@ export default defineContentScript({
                     </div>
                     <div class="qb-popover-item-info">
                         <div class="qb-popover-item-title" title="${video.title.replace(/"/g, '&quot;')}">${video.title}</div>
-                        <div class="qb-popover-item-author">UP: ${video.author} · ${video.duration} · 匹配${Math.round((video.highlightRatio || 0) * 100)}%</div>
+                        <div class="qb-popover-item-author">UP：${qbEscape(video.author)}${video.duration ? ` · ${qbEscape(video.duration)}` : ''}</div>
+                        <div class="qb-popover-item-chips">
+                            <span class="qb-chip qb-chip-blue">匹配 ${Math.round((video.highlightRatio || 0) * 100)}%</span>
+                            <span class="qb-chip">弹幕 ${getSearchResultDanmakuCount(video)}</span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -430,7 +463,7 @@ export default defineContentScript({
 
                     // 显示成功状态
                     if (overlay) {
-                        overlay.innerHTML = `<span class="qb-success-icon">✓</span><span>${response.count}条</span>`;
+                        overlay.innerHTML = `<span class="qb-success-icon">${QB_ICONS.check}</span><span>${response.count} 条</span>`;
                         overlay.classList.add('qb-overlay-success');
                     }
 
@@ -454,7 +487,7 @@ export default defineContentScript({
             } catch (error) {
                 console.error('[Quark] 弹幕下载失败:', error);
                 if (overlay) {
-                    overlay.innerHTML = '<span class="qb-error-icon">✗</span>';
+                    overlay.innerHTML = `<span class="qb-error-icon">${QB_ICONS.close}</span>`;
                     overlay.classList.add('qb-overlay-error');
                     setTimeout(() => {
                         overlay.style.display = 'none';
@@ -524,6 +557,13 @@ export default defineContentScript({
             const searchInput = document.getElementById('qb-search-input');
             if (searchInput) {
                 searchInput.value = cleanedTitle;
+            }
+
+            // Privacy: only send the title to Bilibili when automatic title matching is on.
+            const gateSettings = (await browser.storage.local.get('danmakuSettings')).danmakuSettings || {};
+            if (!gateSettings.autoDownload || gateSettings.autoMatchByTitle === false) {
+                console.log('[Quark] 未开启按标题自动匹配，跳过后台搜索');
+                return;
             }
 
             console.log(`[Quark] 后台搜索: "${cleanedTitle}"`);
@@ -942,8 +982,7 @@ export default defineContentScript({
 
             const content = document.getElementById('qb-popover-content');
             if (content) {
-                content.innerHTML =
-                    '<div class="qb-popover-loading"><span class="qb-loading-spinner"></span>正在搜索...</div>';
+                content.innerHTML = qbStateHtml('loading', '正在搜索...');
             }
         }
 

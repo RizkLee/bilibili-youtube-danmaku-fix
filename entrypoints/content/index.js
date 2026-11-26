@@ -746,6 +746,12 @@ export default defineContentScript({
         async function autoCheckAndDownloadDanmaku(token = activeInitToken) {
             const settings = await getDanmakuSettings();
 
+            // Privacy: never send the video title (or channel) to Bilibili unless the user allows it.
+            if (settings.autoMatchByTitle === false) {
+                console.log('已关闭按标题自动匹配，跳过自动搜索');
+                return false;
+            }
+
             if (await shouldUseLegacyYouTubeLogic(settings, token)) {
                 return legacyAutoCheckAndDownloadDanmaku(token);
             }
